@@ -1,7 +1,7 @@
 -- =======================================================================
---   💎 PRISM UI LIBRARY  v1.1  (2.5D diamond hub)
---   Layered depth planes that follow your mouse • diamond-shaped hub and
---   nodes on a diamond orbit • iridescent borders • floating crystal shards
+--   💎 PRISM UI LIBRARY  v2.0  (Realistic 2.5D Gemstone Engine)
+--   Point-light sheen reflections • internal crystal refraction
+--   Perspective foreshortening • dynamic bevel illumination
 -- =======================================================================
 
 local Players          = game:GetService("Players")
@@ -16,9 +16,8 @@ local Workspace        = game:GetService("Workspace")
 local localPlayer      = Players.LocalPlayer
 
 local GUI_NAME = "Prism_Main"
-local SQ = 0.70710678 -- 1 / sqrt(2): a square rotated 45deg with this scale fills a box diagonally
+local SQ = 0.70710678 -- 1 / sqrt(2)
 
--- Where can we mount the GUI? (executor hidden-ui -> CoreGui -> PlayerGui)
 local function candidateParents()
 	local list = {}
 	if typeof(gethui) == "function" then
@@ -76,7 +75,6 @@ local function new(class, props, parent)
 	return inst
 end
 
--- UICorner in pixels (radius), or a full circle when radius is nil
 local function round(parent, px)
 	local r = px and UDim.new(0, px) or UDim.new(1, 0)
 	return new("UICorner", { CornerRadius = r }, parent)
@@ -104,8 +102,6 @@ local function label(props, parent)
 	return new("TextLabel", p, parent)
 end
 
--- top-light / bottom-dark shading. `rotation` is in the object's own space
--- (diamonds are rotated 45deg, so they pass 45 to get a screen-vertical light)
 local function bevel(parent, darkness, rotation)
 	local d = darkness or 150
 	return new("UIGradient", {
@@ -114,8 +110,6 @@ local function bevel(parent, darkness, rotation)
 	}, parent)
 end
 
--- A diamond = a square rotated 45deg. `scale` is the diamond's width as a
--- fraction of its (square) parent. Keep content OUT of diamonds: children rotate too.
 local function diamond(parent, props, scale)
 	local p = {
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -130,7 +124,6 @@ local function diamond(parent, props, scale)
 	return new("Frame", p, parent)
 end
 
--- iridescent colour bands that travel around strokes (strokes keep Color = white)
 local PRISM = ColorSequence.new({
 	ColorSequenceKeypoint.new(0.00, Color3.fromRGB(100, 232, 255)),
 	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(165, 115, 255)),
@@ -143,16 +136,17 @@ local PRISM_RED = ColorSequence.new({
 	ColorSequenceKeypoint.new(1.0, Color3.fromRGB(255, 70, 95)),
 })
 
--- soft diagonal light band (shifts with the mouse = fake lighting)
-local SHEEN_SEQ = NumberSequence.new({
-	NumberSequenceKeypoint.new(0.00, 1),
-	NumberSequenceKeypoint.new(0.38, 1),
-	NumberSequenceKeypoint.new(0.50, 0.86),
-	NumberSequenceKeypoint.new(0.62, 1),
-	NumberSequenceKeypoint.new(1.00, 1),
+-- Realistic point specular glint curve (sharp central gleam that tapers off)
+local GEM_SPECULAR = NumberSequence.new({
+	NumberSequenceKeypoint.new(0.00, 1.0),
+	NumberSequenceKeypoint.new(0.35, 1.0),
+	NumberSequenceKeypoint.new(0.48, 0.55),
+	NumberSequenceKeypoint.new(0.50, 0.25),
+	NumberSequenceKeypoint.new(0.52, 0.55),
+	NumberSequenceKeypoint.new(0.65, 1.0),
+	NumberSequenceKeypoint.new(1.00, 1.0),
 })
 
--- points on a diamond outline, walking clockwise from the top vertex
 local PTS = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } }
 local function perimeterPoint(u, R)
 	u = u % 1
@@ -191,10 +185,9 @@ local function playHoverSound(pitch, volume)
 end
 
 -- =======================================================================
---   NOTIFICATIONS (slide-in toasts)
+--   NOTIFICATIONS
 -- =======================================================================
 local NotifyHolder
-
 local ACCENTS = {
 	info    = Theme.AccentGlow,
 	success = Theme.Success,
@@ -232,7 +225,6 @@ function Prism:Notify(config)
 	bevel(toast, 175)
 	outline(toast, accent, 1.5, 0.15)
 
-	-- little diamond accent on the left edge
 	new("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.new(0, 16, 0, 20),
@@ -279,7 +271,6 @@ function Prism:Notify(config)
 		Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 5,
 	}, toast)
 	clickCatcher.MouseButton1Click:Connect(dismiss)
-
 	task.delay(duration, dismiss)
 end
 
@@ -290,12 +281,10 @@ function Prism:CreateWindow(settings)
 	settings = settings or {}
 	local winTitle  = tostring(settings.Title or "PRISM")
 	local toggleKey = settings.ToggleKey
-	if toggleKey == nil then toggleKey = Enum.KeyCode.RightShift end -- pass false to disable
-	local parallax  = tonumber(settings.Parallax)
-	if parallax == nil then parallax = 1 end                         -- 0 = off, 2 = extra strong
-	local shardsOn  = settings.Shards ~= false                       -- floating crystal shards
+	if toggleKey == nil then toggleKey = Enum.KeyCode.RightShift end
+	local parallax  = tonumber(settings.Parallax) or 1
+	local shardsOn  = settings.Shards ~= false
 
-	-- remove any previous copy
 	for _, p in ipairs(candidateParents()) do
 		local old = p:FindFirstChild(GUI_NAME)
 		if old then pcall(function() old:Destroy() end) end
@@ -322,7 +311,6 @@ function Prism:CreateWindow(settings)
 		DisplayOrder = 999,
 	})
 
-	-- ---------- notification holder ----------
 	NotifyHolder = new("Frame", {
 		Name = "NotifyHolder",
 		AnchorPoint = Vector2.new(1, 1),
@@ -338,9 +326,7 @@ function Prism:CreateWindow(settings)
 	}, NotifyHolder)
 
 	-- ===================================================================
-	--   STAGE + DEPTH LAYERS  (this is the 2.5D engine)
-	--   Every registered layer gets pushed by the smoothed mouse position
-	--   times its depth: depth > 0 = closer to you, depth < 0 = further away.
+	--   STAGE & DEPTH ENGINE
 	-- ===================================================================
 	local Stage = new("Frame", {
 		Name = "Stage",
@@ -356,7 +342,6 @@ function Prism:CreateWindow(settings)
 		layers[#layers + 1] = { obj = obj, base = obj.Position, depth = depth }
 	end
 
-	-- ---------- soft shadow (furthest back) ----------
 	local Shadow = new("Frame", {
 		Name = "Shadow",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -371,7 +356,6 @@ function Prism:CreateWindow(settings)
 	round(Shadow, 24)
 	addLayer(Shadow, -1.8)
 
-	-- ---------- diamond glow ----------
 	local GLOW_PADS  = { 50, 110, 180 }
 	local GLOW_BASE  = { 0.85, 0.92, 0.965 }
 	local GLOW_COLOR = { Theme.Accent, Theme.Deep, Theme.Ice }
@@ -395,7 +379,6 @@ function Prism:CreateWindow(settings)
 	end
 	local glowIntensity, glowTarget = 0, 0
 
-	-- ---------- floating crystal shards (each at its own depth) ----------
 	local shards = {}
 	if shardsOn then
 		local palette = { Theme.Ice, Theme.Accent, Theme.Pink, Color3.fromRGB(235, 240, 255) }
@@ -426,7 +409,6 @@ function Prism:CreateWindow(settings)
 	end
 	local shardMul = 0
 
-	-- ---------- FX layer (shockwaves) ----------
 	local FX = new("Frame", {
 		Name = "FX",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -436,7 +418,6 @@ function Prism:CreateWindow(settings)
 		ZIndex = 4,
 	}, Stage)
 
-	-- expanding diamond outline
 	local function shockwave(color, fromD, toD, duration, thickness)
 		local ring = new("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -453,7 +434,6 @@ function Prism:CreateWindow(settings)
 		Debris:AddItem(ring, duration + 0.1)
 	end
 
-	-- ---------- floating reopen gem ----------
 	local MiniGem = new("TextButton", {
 		Name = "MiniGem",
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -485,9 +465,6 @@ function Prism:CreateWindow(settings)
 		tw(MiniStroke, { Thickness = 3.5 }, 0.15)
 	end)
 
-	-- ===================================================================
-	--   CORE (a big diamond; stays square so the diamond math holds)
-	-- ===================================================================
 	local COLLAPSED_D = 250
 	local EXPANDED_D  = 920
 
@@ -502,7 +479,7 @@ function Prism:CreateWindow(settings)
 
 	local Body = diamond(CoreRoot, { BackgroundColor3 = Theme.CoreBg, ZIndex = 1 }, 1)
 	round(Body, 12)
-	bevel(Body, 175, 45)
+	local CoreBevel = bevel(Body, 175, 45)
 	local CoreStroke = outline(Body, Color3.new(1, 1, 1), 4.5)
 	sweep(CoreStroke, 35)
 
@@ -513,15 +490,13 @@ function Prism:CreateWindow(settings)
 		ZIndex = 2,
 	}, Body)
 	round(BodySheen, 12)
-	local BodySheenGrad = new("UIGradient", { Rotation = 0, Transparency = SHEEN_SEQ }, BodySheen)
+	local BodySheenGrad = new("UIGradient", { Rotation = 45, Transparency = GEM_SPECULAR }, BodySheen)
 
-	-- inner facet outline (a little further "inside" the crystal)
 	local Inner1 = diamond(CoreRoot, { BackgroundTransparency = 1, ZIndex = 2 }, 0.72)
 	round(Inner1, 8)
 	outline(Inner1, Theme.AccentGlow, 1.4, 0.55)
 	addLayer(Inner1, -0.5)
 
-	-- gem girdle + crown/pavilion lines (fade out toward the middle)
 	local function facetLine(yScale, widthScale, alpha)
 		local line = new("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -546,7 +521,6 @@ function Prism:CreateWindow(settings)
 	facetLine(0.3, 0.58, 0.45)
 	facetLine(0.7, 0.58, 0.45)
 
-	-- four corner jewels that float above the vertices
 	local jewels = {}
 	local jewelPos = {
 		UDim2.new(0.5, 0, 0, 0), UDim2.new(1, 0, 0.5, 0),
@@ -567,7 +541,6 @@ function Prism:CreateWindow(settings)
 		jewels[i] = j
 	end
 
-	-- ---------- collapsed view ----------
 	local CollapsedView = new("Frame", {
 		Name = "CollapsedView",
 		Size = UDim2.new(1, 0, 1, 0),
@@ -577,7 +550,7 @@ function Prism:CreateWindow(settings)
 
 	local Inner2 = diamond(CollapsedView, { BackgroundColor3 = Theme.InnerRing, ZIndex = 1 }, 0.5)
 	round(Inner2, 6)
-	bevel(Inner2, 140, 45)
+	local Inner2Bevel = bevel(Inner2, 140, 45)
 	outline(Inner2, Theme.Accent, 2, 0.35)
 	addLayer(Inner2, -1.0)
 
@@ -600,7 +573,6 @@ function Prism:CreateWindow(settings)
 	new("UITextSizeConstraint", { MaxTextSize = 18, MinTextSize = 6 }, CoreTitle)
 	addLayer(CoreTitle, 1.4)
 
-	-- ---------- expanded view ----------
 	local ExpandedView = new("Frame", {
 		Name = "ExpandedView",
 		Size = UDim2.new(1, 0, 1, 0),
@@ -656,7 +628,6 @@ function Prism:CreateWindow(settings)
 		tw(ReturnBtn, { TextColor3 = Theme.Accent }, 0.15)
 	end)
 
-	-- the page area is a rectangle that fits INSIDE the diamond (|x| + |y| < half-diagonal)
 	local PagesMask = new("CanvasGroup", {
 		Name = "PagesMask",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -678,7 +649,6 @@ function Prism:CreateWindow(settings)
 	}, PagesMask)
 	addLayer(PagesMask, 0.7)
 
-	-- ---------- orbiting nodes live on this plane ----------
 	local BaseCenter = new("Frame", {
 		Name = "BaseCenter",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -689,7 +659,6 @@ function Prism:CreateWindow(settings)
 	}, Stage)
 	addLayer(BaseCenter, 0.7)
 
-	-- ---------- viewport scaling ----------
 	local function applyScale()
 		local cam = Workspace.CurrentCamera
 		local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
@@ -700,7 +669,6 @@ function Prism:CreateWindow(settings)
 		track(Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyScale))
 	end
 
-	-- ---------- window state ----------
 	local WindowHandler = {
 		Tabs = {},
 		Radius = 250,
@@ -722,7 +690,6 @@ function Prism:CreateWindow(settings)
 		return perimeterPoint((i - 1) / total, WindowHandler.Radius)
 	end
 
-	-- idle look for a node (does NOT touch size/position)
 	local function resetTabVisuals(tab)
 		tab.liftT = 0
 		tw(tab.Body, { BackgroundColor3 = Theme.NodeBg }, 0.2)
@@ -741,7 +708,6 @@ function Prism:CreateWindow(settings)
 		tw(tab.Frame, { Size = UDim2.new(0, 130, 0, 130) }, 0.2)
 	end
 
-	-- node is absorbed by the core
 	local function flyIn(tab, delay)
 		task.delay(delay or 0, function()
 			tab.liftT = 0
@@ -757,7 +723,6 @@ function Prism:CreateWindow(settings)
 		end)
 	end
 
-	-- node pops out to its slot on the diamond orbit
 	local function flyOut(tab, i, delay, total)
 		task.delay(delay or 0, function()
 			if WindowHandler.IsExpanded or WindowHandler.IsMinimized or WindowHandler.Destroyed then return end
@@ -882,7 +847,7 @@ function Prism:CreateWindow(settings)
 	track(MiniGem.MouseButton1Click:Connect(function() WindowHandler:Restore() end))
 
 	-- ===================================================================
-	--   NODE GENERATOR (small diamonds with their own floating icon layer)
+	--   NODE GENERATOR (Multi-Layer Depth Planes)
 	-- ===================================================================
 	local function canHover()
 		return (not WindowHandler.IsExpanded) and (not WindowHandler.IsMinimized) and (not WindowHandler.InStartupAnim)
@@ -900,10 +865,11 @@ function Prism:CreateWindow(settings)
 			Visible = false,
 			ZIndex = 2,
 		}, BaseCenter)
+		local NodeScale = new("UIScale", nil, NodeFrame)
 
 		local NodeBody = diamond(NodeFrame, { BackgroundColor3 = Theme.NodeBg }, 1)
 		round(NodeBody, 8)
-		bevel(NodeBody, 170, 45)
+		local NodeBevel = bevel(NodeBody, 170, 45)
 		local NodeStroke = outline(NodeBody, Color3.new(1, 1, 1), 3, 0.5)
 		sweep(NodeStroke, isClose and 70 or 55, isClose and PRISM_RED or PRISM)
 
@@ -913,14 +879,23 @@ function Prism:CreateWindow(settings)
 			BorderSizePixel = 0,
 		}, NodeBody)
 		round(NodeSheen, 8)
-		local NodeSheenGrad = new("UIGradient", { Rotation = 0, Transparency = SHEEN_SEQ }, NodeSheen)
+		local NodeSheenGrad = new("UIGradient", { Rotation = 45, Transparency = GEM_SPECULAR }, NodeSheen)
 
-		local InnerPlate = diamond(NodeFrame, { BackgroundColor3 = Theme.InnerRing }, 0.66)
+		-- Inner plate sits on an internal refractive plane
+		local InnerPlateHolder = new("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			Size = UDim2.new(1, 0, 1, 0),
+			BackgroundTransparency = 1,
+			ZIndex = 2,
+		}, NodeFrame)
+
+		local InnerPlate = diamond(InnerPlateHolder, { BackgroundColor3 = Theme.InnerRing }, 0.66)
 		round(InnerPlate, 6)
-		bevel(InnerPlate, 125, 45)
+		local InnerPlateBevel = bevel(InnerPlate, 125, 45)
 		local NodeDecStroke = outline(InnerPlate, Theme.BorderDim, 1.2, 0.5)
 
-		-- the icon floats on its own layer above the diamond (shifts more than the body)
+		-- Float layer sits on the highest depth plane
 		local Float = new("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -932,7 +907,7 @@ function Prism:CreateWindow(settings)
 		local NodeIcon = label({
 			Text = iconText or "💎",
 			Font = Enum.Font.GothamBold,
-			TextSize = isClose and 38 or 36,
+			TextSize = isClose and 36 or 34,
 			TextColor3 = isClose and Theme.RedClose or Theme.TextMuted,
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.new(0.5, 0, 0.5, -6),
@@ -950,7 +925,6 @@ function Prism:CreateWindow(settings)
 			Size = UDim2.new(1, -20, 0, 16),
 		}, Float)
 
-		-- hit area is a smaller centred square so neighbouring diamonds don't steal clicks
 		local ClickBtn = new("TextButton", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -963,6 +937,7 @@ function Prism:CreateWindow(settings)
 
 		local tab = {
 			Frame = NodeFrame,
+			Scale = NodeScale,
 			Body = NodeBody,
 			ClickBtn = ClickBtn,
 			Icon = NodeIcon,
@@ -970,6 +945,9 @@ function Prism:CreateWindow(settings)
 			Stroke = NodeStroke,
 			DecStroke = NodeDecStroke,
 			InnerPlate = InnerPlate,
+			InnerHolder = InnerPlateHolder,
+			InnerBevel = InnerPlateBevel,
+			BodyBevel = NodeBevel,
 			Float = Float,
 			SheenGrad = NodeSheenGrad,
 			Title = title,
@@ -999,7 +977,6 @@ function Prism:CreateWindow(settings)
 		return tab
 	end
 
-	-- keep ring spacing sensible when many tabs exist
 	function WindowHandler:RealignNodes()
 		local total = #self.Tabs
 		if total == 0 then return end
@@ -1020,7 +997,6 @@ function Prism:CreateWindow(settings)
 	local function registerTab(tab)
 		table.insert(WindowHandler.Tabs, tab)
 		WindowHandler:RealignNodes()
-		-- added after startup? pop it in
 		if WindowHandler.Started and not WindowHandler.InStartupAnim and not WindowHandler.IsExpanded and not WindowHandler.IsMinimized then
 			local total = #WindowHandler.Tabs
 			tab.Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -1030,10 +1006,7 @@ function Prism:CreateWindow(settings)
 	end
 
 	-- ===================================================================
-	--   ✨ CRYSTALLIZE (startup animation)
-	--   1. the diamond forms with shockwaves   2. the gem icon lights up
-	--   3. nodes slide out along the diamond rail   4. landing flash + ding
-	--   5. title types in
+	--   STARTUP ANIMATION
 	-- ===================================================================
 	task.defer(function()
 		WindowHandler.InStartupAnim = true
@@ -1041,7 +1014,6 @@ function Prism:CreateWindow(settings)
 		task.wait(0.35)
 		if WindowHandler.Destroyed then return end
 
-		-- 1. the diamond forms
 		glowTarget = 1
 		playSound(Prism.Sounds.Open, 0.75, 1.0)
 		tw(CoreRoot, { Size = UDim2.new(0, 330, 0, 330) }, 0.7, Enum.EasingStyle.Back)
@@ -1053,12 +1025,10 @@ function Prism:CreateWindow(settings)
 		tw(CoreStroke, { Thickness = 4.5 }, 0.4)
 		task.wait(0.2)
 
-		-- 2. the gem icon lights up
 		tw(CoreIcon, { TextTransparency = 0 }, 0.5)
 		task.wait(0.55)
 		if WindowHandler.Destroyed then return end
 
-		-- 3. nodes slide out along the diamond rail
 		playSound(Prism.Sounds.Open, 1.15, 0.8)
 		shockwave(Theme.Pink, 220, 780, 1.2, 3)
 
@@ -1087,7 +1057,6 @@ function Prism:CreateWindow(settings)
 			el = os.clock() - startT
 			local p = math.clamp(el / totalTime, 0, 1)
 
-			-- core relaxes from 330 -> 250 while the nodes travel
 			local coreEase = TweenService:GetValue(p, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 			local cs = 330 - (80 * coreEase)
 			CoreRoot.Size = UDim2.new(0, cs, 0, cs)
@@ -1127,7 +1096,6 @@ function Prism:CreateWindow(settings)
 			end
 		until el >= totalTime
 
-		-- 4. landing: shockwave + ding
 		playSound(Prism.Sounds.Notify, 1.4, 1.0)
 		shockwave(Theme.AccentGlow, 210, 680, 0.9, 4)
 		task.wait(0.15)
@@ -1137,7 +1105,6 @@ function Prism:CreateWindow(settings)
 			end)
 		end
 
-		-- 5. title types in
 		local upper = string.upper(winTitle)
 		for i = 1, #upper do
 			CoreTitle.Text = string.sub(upper, 1, i)
@@ -1147,7 +1114,6 @@ function Prism:CreateWindow(settings)
 		WindowHandler.InStartupAnim = false
 		WindowHandler.Started = true
 
-		-- catch tabs registered mid-animation
 		local newTotal = #WindowHandler.Tabs
 		WindowHandler.Radius = nodeRadius(newTotal)
 		for i, tab in ipairs(WindowHandler.Tabs) do
@@ -1162,16 +1128,15 @@ function Prism:CreateWindow(settings)
 	end)
 
 	-- ===================================================================
-	--   MAIN LOOP  (mouse parallax, glow, shards, sheen, spinning borders)
+	--   2.5D REALISTIC GEMSTONE RENDER LOOP
 	-- ===================================================================
 	local t0 = os.clock()
-	local pointer = Vector2.new(0, 0) -- smoothed, normalised mouse position (-1..1)
+	local pointer = Vector2.new(0, 0)
 	local mouseEnabled = UserInputService.MouseEnabled
 
 	track(RunService.RenderStepped:Connect(function(dt)
 		local t = os.clock() - t0
 
-		-- spinning stroke gradients
 		for i = #spinners, 1, -1 do
 			local s = spinners[i]
 			if s.g.Parent then
@@ -1181,27 +1146,28 @@ function Prism:CreateWindow(settings)
 			end
 		end
 
-		-- ---- pointer -> smoothed parallax vector ----
+		-- Normalized mouse vector (-1 to 1)
 		local cam = Workspace.CurrentCamera
 		local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
 		local tx, ty = 0, 0
+		local mouseScreenPos = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+
 		if mouseEnabled then
 			local ml = UserInputService:GetMouseLocation()
+			mouseScreenPos = ml
 			tx = math.clamp((ml.X - vp.X * 0.5) / (vp.X * 0.5), -1, 1)
 			ty = math.clamp((ml.Y - vp.Y * 0.5) / (vp.Y * 0.5), -1, 1)
-			-- tiny idle sway so it never feels frozen
-			tx = tx + math.sin(t * 0.6) * 0.06
-			ty = ty + math.cos(t * 0.45) * 0.05
+			tx = tx + math.sin(t * 0.6) * 0.04
+			ty = ty + math.cos(t * 0.45) * 0.03
 		else
-			-- touch devices: slow automatic sway
-			tx = math.sin(t * 0.6) * 0.55
-			ty = math.cos(t * 0.45) * 0.4
+			tx = math.sin(t * 0.6) * 0.45
+			ty = math.cos(t * 0.45) * 0.35
 		end
-		pointer = pointer:Lerp(Vector2.new(tx, ty), 1 - math.exp(-dt * 8))
+		pointer = pointer:Lerp(Vector2.new(tx, ty), 1 - math.exp(-dt * 9))
 		local px, py = pointer.X, pointer.Y
 
-		-- the whole stage drifts toward the pointer, then each layer shifts by depth
-		Stage.Position = UDim2.new(0.5, px * 10 * parallax, 0.5, py * 8 * parallax)
+		-- Whole stage moves with parallax
+		Stage.Position = UDim2.new(0.5, px * 12 * parallax, 0.5, py * 9 * parallax)
 		local K = 26 * parallax
 		for _, l in ipairs(layers) do
 			l.obj.Position = UDim2.new(
@@ -1210,16 +1176,52 @@ function Prism:CreateWindow(settings)
 			)
 		end
 
-		-- fake lighting: the diagonal sheen slides with the pointer
-		local sheenOffset = Vector2.new(0.64 * (px + py) * math.max(0.4, parallax), 0)
-		BodySheenGrad.Offset = sheenOffset
+		-- Dynamic bevel lighting on the main crystal
+		local lightAngle = math.deg(math.atan2(py, px))
+		CoreBevel.Rotation = 45 + (px * 15)
+		Inner2Bevel.Rotation = 45 - (px * 20)
+		BodySheenGrad.Offset = Vector2.new(0.55 * (px + py) * math.max(0.4, parallax), 0)
+
+		-- ===============================================================
+		--   PER-DIAMOND POINT-LIGHT & 3D REFRACTION CALCULATION
+		-- ===============================================================
 		for _, tab in ipairs(WindowHandler.Tabs) do
-			tab.lift = tab.lift + (tab.liftT - tab.lift) * math.min(1, dt * 12)
-			tab.Float.Position = UDim2.new(0.5, px * 7 * parallax, 0.5, (py * 7 * parallax) - (tab.lift * 12))
-			tab.SheenGrad.Offset = sheenOffset
+			tab.lift = tab.lift + (tab.liftT - tab.lift) * math.min(1, dt * 14)
+
+			if tab.Frame.Visible then
+				local tabCenter = tab.Frame.AbsolutePosition + (tab.Frame.AbsoluteSize * 0.5)
+				local diff = mouseScreenPos - tabCenter
+				local dist = diff.Magnitude
+				local normDiff = dist > 0 and (diff / dist) or Vector2.zero
+
+				-- 1. Point-light sheen angle & position on this specific diamond
+				local sheenOffset = math.clamp((normDiff.X + normDiff.Y) * 0.45, -0.7, 0.7)
+				tab.SheenGrad.Offset = Vector2.new(sheenOffset, 0)
+				local angle = math.deg(math.atan2(normDiff.Y, normDiff.X))
+				tab.SheenGrad.Rotation = 45 + (normDiff.X * 20)
+
+				-- 2. Facet lighting rotates to face the cursor
+				tab.BodyBevel.Rotation = 45 + (normDiff.X * 18)
+				tab.InnerBevel.Rotation = 45 - (normDiff.Y * 18)
+
+				-- 3. Multi-layer refraction depth (Inner plate shifts inward, icon shifts outward)
+				local innerX = -normDiff.X * 4 * parallax
+				local innerY = -normDiff.Y * 4 * parallax
+				tab.InnerHolder.Position = UDim2.new(0.5, innerX, 0.5, innerY)
+
+				local floatX = (px * 8 * parallax) + (normDiff.X * 5)
+				local floatY = (py * 8 * parallax) + (normDiff.Y * 5) - (tab.lift * 12)
+				tab.Float.Position = UDim2.new(0.5, floatX, 0.5, floatY)
+
+				-- 4. 3D Tilt perspective foreshortening
+				-- Diamonds tilting toward the mouse scale up slightly, away shrink slightly
+				local tiltDot = (normDiff.X * px + normDiff.Y * py)
+				local targetScale = 1 + (tiltDot * 0.045 * parallax)
+				tab.Scale.Scale = math.clamp(targetScale, 0.94, 1.06)
+			end
 		end
 
-		-- ---- glow + shadow follow the core size ----
+		-- Glow & shadow tracking
 		glowIntensity = glowIntensity + (glowTarget - glowIntensity) * math.min(1, dt * 4)
 		local flick = math.clamp(0.5 + math.noise(t * 2.2, 3.71), 0, 1)
 		local coreD = CoreRoot.Visible and CoreRoot.Size.X.Offset or 0
@@ -1235,14 +1237,12 @@ function Prism:CreateWindow(settings)
 		Shadow.Size = UDim2.new(0, shSide, 0, shSide)
 		Shadow.BackgroundTransparency = 1 - (0.5 * glowIntensity)
 
-		-- ---- gem breathing + vertex jewel twinkle ----
 		local pulse = 0.26 + 0.01 * math.sin(t * 2.2)
 		CoreIcon.Size = UDim2.new(pulse, 0, pulse, 0)
 		for i, j in ipairs(jewels) do
 			j.BackgroundTransparency = 0.05 + 0.4 * (0.5 + 0.5 * math.sin(t * 2 + i * 1.3))
 		end
 
-		-- ---- floating shards (own depth, bobbing, fade while a page is open) ----
 		local shardTarget = (WindowHandler.IsExpanded and 0.22 or 1) * glowIntensity
 		shardMul = shardMul + (shardTarget - shardMul) * math.min(1, dt * 3)
 		for _, s in ipairs(shards) do
@@ -1255,11 +1255,16 @@ function Prism:CreateWindow(settings)
 	end))
 
 	-- ===================================================================
-	--   ACTION NODE (click -> callback, no page)
+	--   ACTION NODE (Uses clean standard 'X' for glyph safety)
 	-- ===================================================================
 	function WindowHandler:CreateActionNode(tabName, icon, callback)
 		local isClose = (string.lower(tabName):find("close") ~= nil)
-		local tab = createBaseNode(tabName, icon, isClose)
+		local displayIcon = icon
+		if isClose and (icon == "✕" or icon == nil) then
+			displayIcon = "X"
+		end
+
+		local tab = createBaseNode(tabName, displayIcon, isClose)
 		registerTab(tab)
 
 		tab.ClickBtn.MouseButton1Click:Connect(function()
@@ -1279,7 +1284,7 @@ function Prism:CreateWindow(settings)
 	end
 
 	-- ===================================================================
-	--   TAB (opens an options page inside the big diamond)
+	--   TAB CREATION
 	-- ===================================================================
 	function WindowHandler:CreateTab(tabName, icon)
 		local tab = createBaseNode(tabName, icon, false)
@@ -1310,7 +1315,6 @@ function Prism:CreateWindow(settings)
 			PaddingBottom = UDim.new(0, 46),
 		}, Page)
 
-		-- guarantees elements stay in the order they were created
 		local orderCounter = 0
 		local function nextOrder()
 			orderCounter = orderCounter + 1
@@ -1352,7 +1356,6 @@ function Prism:CreateWindow(settings)
 
 		local TabElements = {}
 
-		-- ---------- card factory ----------
 		local function makeCapsule(h)
 			local Card = new("Frame", {
 				Size = UDim2.new(1, -12, 0, h or 58),
@@ -1366,7 +1369,6 @@ function Prism:CreateWindow(settings)
 
 			local stroke = outline(Card, Theme.BorderDim, 1.3)
 
-			-- diamond bullet
 			local Pip = new("Frame", {
 				AnchorPoint = Vector2.new(0.5, 0.5),
 				Position = UDim2.new(0, 15, 0.5, 0),
@@ -1404,7 +1406,6 @@ function Prism:CreateWindow(settings)
 			return Card, stroke, Pip, bind
 		end
 
-		-- ---------- SECTION ----------
 		function TabElements:CreateSection(secName)
 			local sec = new("Frame", {
 				Size = UDim2.new(1, -12, 0, 34),
@@ -1442,7 +1443,6 @@ function Prism:CreateWindow(settings)
 		end
 		TabElements.AddSection = TabElements.CreateSection
 
-		-- ---------- LABEL ----------
 		function TabElements:CreateLabel(text)
 			local Card = makeCapsule(40)
 			local lbl = label({
@@ -1456,7 +1456,6 @@ function Prism:CreateWindow(settings)
 		end
 		TabElements.AddLabel = TabElements.CreateLabel
 
-		-- ---------- BUTTON ----------
 		function TabElements:CreateButton(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Button"
@@ -1502,7 +1501,6 @@ function Prism:CreateWindow(settings)
 		end
 		TabElements.AddButton = TabElements.CreateButton
 
-		-- ---------- TOGGLE ----------
 		function TabElements:CreateToggle(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Toggle"
@@ -1528,7 +1526,6 @@ function Prism:CreateWindow(settings)
 				}, Card)
 			end
 
-			-- thin rail with a diamond knob
 			local Switch = new("TextButton", {
 				Size = UDim2.new(0, 58, 0, 28),
 				Position = UDim2.new(1, -72, 0.5, -14),
@@ -1587,7 +1584,6 @@ function Prism:CreateWindow(settings)
 		end
 		TabElements.AddToggle = TabElements.CreateToggle
 
-		-- ---------- SLIDER ----------
 		function TabElements:CreateSlider(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Slider"
@@ -1704,7 +1700,6 @@ function Prism:CreateWindow(settings)
 		end
 		TabElements.AddSlider = TabElements.CreateSlider
 
-		-- ---------- DROPDOWN ----------
 		function TabElements:CreateDropdown(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Dropdown"
@@ -1809,13 +1804,12 @@ function Prism:CreateWindow(settings)
 		end
 		TabElements.AddDropdown = TabElements.CreateDropdown
 
-		-- ---------- KEYBIND ----------
 		function TabElements:CreateKeybind(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Keybind"
 			local currentKey = opts.Default or Enum.KeyCode.None
-			local callback = opts.Callback or function() end   -- fires when the key is PRESSED
-			local onChange = opts.OnChange or function() end   -- fires when the key is REBOUND
+			local callback = opts.Callback or function() end
+			local onChange = opts.OnChange or function() end
 
 			local Card, stroke, pip, bind = makeCapsule(56)
 
@@ -1867,7 +1861,6 @@ function Prism:CreateWindow(settings)
 		end
 		TabElements.AddKeybind = TabElements.CreateKeybind
 
-		-- ---------- TEXT INPUT ----------
 		function TabElements:CreateInput(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Input"
@@ -1915,7 +1908,6 @@ function Prism:CreateWindow(settings)
 		end
 		TabElements.AddInput = TabElements.CreateInput
 
-		-- ---------- PARAGRAPH (auto height) ----------
 		function TabElements:CreateParagraph(opts)
 			opts = opts or {}
 			local title = opts.Title or "Information"
@@ -1942,7 +1934,6 @@ function Prism:CreateWindow(settings)
 		return TabElements
 	end
 
-	-- mount it
 	for _, p in ipairs(candidateParents()) do
 		local ok = pcall(function() ScreenGui.Parent = p end)
 		if ok and ScreenGui.Parent == p then break end

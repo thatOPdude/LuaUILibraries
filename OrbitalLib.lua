@@ -2,6 +2,7 @@
 --   🌍 ORBITAL UI LIBRARY  v2  ("Planetfall" Edition)
 --   Radial planet hub • aurora borders • orbiting moon • twinkling stars
 --   Orbital-capture startup • nodes dock into the core • toast system
+--   + DRAGGABLE HUB & DRAGGABLE EXPANDED VIEW
 -- =======================================================================
 
 local Players          = game:GetService("Players")
@@ -100,7 +101,7 @@ local function label(props, parent)
 	return new("TextLabel", p, parent)
 end
 
--- Top-light / bottom-dark bevel (multiplies the frame's own color)
+-- Top-light / bottom-dark bevel
 local function bevel(parent, darkness)
 	local d = darkness or 150
 	return new("UIGradient", {
@@ -109,7 +110,6 @@ local function bevel(parent, darkness)
 	}, parent)
 end
 
--- Aurora bands that travel around a stroke (strokes using these keep Color = white)
 local SWEEP_AURORA = ColorSequence.new({
 	ColorSequenceKeypoint.new(0.00, Color3.fromRGB(0, 225, 255)),
 	ColorSequenceKeypoint.new(0.33, Color3.fromRGB(110, 255, 190)),
@@ -122,7 +122,6 @@ local SWEEP_RED = ColorSequence.new({
 	ColorSequenceKeypoint.new(1.0, Color3.fromRGB(255, 60, 70)),
 })
 
--- the planet "rotates" by cycling hemispheres
 local GLOBES = { "🌍", "🌏", "🌎" }
 
 local function tw(obj, props, duration, style, dir)
@@ -154,7 +153,7 @@ local function playHoverSound(pitch, volume)
 end
 
 -- =======================================================================
---   NOTIFICATIONS (slide-in toasts)
+--   NOTIFICATIONS
 -- =======================================================================
 local NotifyHolder
 
@@ -250,11 +249,10 @@ function Orbital:CreateWindow(settings)
 	settings = settings or {}
 	local winTitle  = tostring(settings.Title or "ORBITAL")
 	local toggleKey = settings.ToggleKey
-	if toggleKey == nil then toggleKey = Enum.KeyCode.RightShift end -- pass false to disable
-	local starsOn   = settings.Stars ~= false  -- twinkling stars + shooting stars
-	local moonOn    = settings.Moon ~= false   -- orbiting moon
+	if toggleKey == nil then toggleKey = Enum.KeyCode.RightShift end
+	local starsOn   = settings.Stars ~= false
+	local moonOn    = settings.Moon ~= false
 
-	-- remove any previous copy
 	for _, p in ipairs(candidateParents()) do
 		local old = p:FindFirstChild(GUI_NAME)
 		if old then pcall(function() old:Destroy() end) end
@@ -281,6 +279,16 @@ function Orbital:CreateWindow(settings)
 		DisplayOrder = 999,
 	})
 
+	-- ---------- master draggable anchor ----------
+	local OrbitCenter = new("Frame", {
+		Name = "OrbitCenter",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0, 0, 0, 0),
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+	}, ScreenGui)
+
 	-- ---------- notification holder ----------
 	NotifyHolder = new("Frame", {
 		Name = "NotifyHolder",
@@ -296,7 +304,7 @@ function Orbital:CreateWindow(settings)
 		Padding = UDim.new(0, 10),
 	}, NotifyHolder)
 
-	-- ---------- ambient glow (behind everything) ----------
+	-- ---------- ambient glow ----------
 	local GLOW_PADS  = { 46, 92, 150 }
 	local GLOW_BASE  = { 0.84, 0.91, 0.965 }
 	local GLOW_COLOR = { Theme.Accent, Theme.Deep, Theme.Deep }
@@ -311,13 +319,13 @@ function Orbital:CreateWindow(settings)
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			ZIndex = 1,
-		}, ScreenGui)
+		}, OrbitCenter)
 		round(g)
 		Glow[i] = g
 	end
 	local glowIntensity, glowTarget = 0, 0
 
-	-- ---------- FX layer (stars, shockwaves, moon; sits under the core) ----------
+	-- ---------- FX layer ----------
 	local FX = new("Frame", {
 		Name = "FX",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -325,7 +333,7 @@ function Orbital:CreateWindow(settings)
 		Size = UDim2.new(0, 0, 0, 0),
 		BackgroundTransparency = 1,
 		ZIndex = 2,
-	}, ScreenGui)
+	}, OrbitCenter)
 	local FXScale = new("UIScale", nil, FX)
 
 	local function shockwave(color, fromSize, toSize, duration, thickness)
@@ -344,7 +352,7 @@ function Orbital:CreateWindow(settings)
 		Debris:AddItem(ring, duration + 0.1)
 	end
 
-	-- ---------- FXTop (draws ABOVE the core: used when the moon swings in front) ----------
+	-- ---------- FXTop ----------
 	local FXTop = new("Frame", {
 		Name = "FXTop",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -352,7 +360,7 @@ function Orbital:CreateWindow(settings)
 		Size = UDim2.new(0, 0, 0, 0),
 		BackgroundTransparency = 1,
 		ZIndex = 4,
-	}, ScreenGui)
+	}, OrbitCenter)
 	local FXTopScale = new("UIScale", nil, FXTop)
 
 	-- ---------- twinkling star field ----------
@@ -412,7 +420,7 @@ function Orbital:CreateWindow(settings)
 		Debris:AddItem(f, 1.1)
 	end
 
-	-- ---------- orbiting moon (tilted ellipse, passes behind AND in front of the planet) ----------
+	-- ---------- orbiting moon ----------
 	local MOON_TRAIL = 8
 	local MOON_TILT  = -0.32
 	local MOON_COS, MOON_SIN = math.cos(MOON_TILT), math.sin(MOON_TILT)
@@ -452,7 +460,7 @@ function Orbital:CreateWindow(settings)
 		Size = UDim2.new(0, 0, 0, 0),
 		BackgroundTransparency = 1,
 		ZIndex = 5,
-	}, ScreenGui)
+	}, OrbitCenter)
 	local BaseScale = new("UIScale", nil, BaseCenter)
 
 	-- ---------- floating reopen globe ----------
@@ -492,7 +500,7 @@ function Orbital:CreateWindow(settings)
 		BackgroundColor3 = Theme.CoreBg,
 		BorderSizePixel = 0,
 		ZIndex = 3,
-	}, ScreenGui)
+	}, OrbitCenter)
 	round(CoreHolder)
 	bevel(CoreHolder, 190)
 	local CoreScale = new("UIScale", nil, CoreHolder)
@@ -509,7 +517,6 @@ function Orbital:CreateWindow(settings)
 	round(DecRing)
 	outline(DecRing, Theme.BorderDim, 1.5, 0.35)
 
-	-- ring of city-light dots (slowly rotates)
 	local function makeOrbitRing(parent, inset, count)
 		local ring = new("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -533,7 +540,7 @@ function Orbital:CreateWindow(settings)
 		return ring
 	end
 
-	-- Collapsed view (scale-based so the startup growth looks right)
+	-- Collapsed view
 	local CollapsedView = new("Frame", {
 		Name = "CollapsedView",
 		Size = UDim2.new(1, 0, 1, 0),
@@ -578,12 +585,23 @@ function Orbital:CreateWindow(settings)
 
 	local BigOrbitRing = makeOrbitRing(ExpandedView, 70, 48)
 
+	-- Drag zone at the top of the expanded circle
+	local TopDragZone = new("Frame", {
+		Name = "TopDragZone",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 0),
+		Size = UDim2.new(1, 0, 0, 110),
+		BackgroundTransparency = 1,
+		ZIndex = 4,
+	}, ExpandedView)
+
 	local HeaderPill = new("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 40),
 		Size = UDim2.new(0, 280, 0, 40),
 		BackgroundColor3 = Theme.CardBg,
 		BorderSizePixel = 0,
+		ZIndex = 5,
 	}, ExpandedView)
 	round(HeaderPill)
 	bevel(HeaderPill, 160)
@@ -593,6 +611,7 @@ function Orbital:CreateWindow(settings)
 	local PortalTitle = label({
 		Text = "🌍 OPTIONS", Font = Enum.Font.GothamBold, TextSize = 16, TextColor3 = Theme.AccentGlow,
 		Size = UDim2.new(1, 0, 1, 0),
+		ZIndex = 5,
 	}, HeaderPill)
 
 	local ReturnBtn = new("TextButton", {
@@ -607,6 +626,7 @@ function Orbital:CreateWindow(settings)
 		TextColor3 = Theme.Accent,
 		BorderSizePixel = 0,
 		AutoButtonColor = false,
+		ZIndex = 6,
 	}, ExpandedView)
 	round(ReturnBtn)
 	local ReturnStroke = outline(ReturnBtn, Theme.BorderDim, 1.6)
@@ -631,6 +651,7 @@ function Orbital:CreateWindow(settings)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		GroupTransparency = 0,
+		ZIndex = 4,
 	}, ExpandedView)
 	new("UIGradient", {
 		Name = "FadeMask",
@@ -670,12 +691,72 @@ function Orbital:CreateWindow(settings)
 	}
 	local ExpandedReady = false
 
+	-- ===================================================================
+	--   DRAGGING SYSTEM
+	-- ===================================================================
+	local isDragging = false
+	local dragInput = nil
+	local dragStart = nil
+	local startPos = nil
+
+	local function makeDraggable(handle)
+		handle.Active = true
+		track(handle.InputBegan:Connect(function(input)
+			if WindowHandler.InStartupAnim or WindowHandler.IsMinimized or WindowHandler.Destroyed then return end
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				isDragging = true
+				dragStart = input.Position
+				startPos = OrbitCenter.Position
+
+				local endedConn
+				endedConn = input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then
+						isDragging = false
+						if endedConn then endedConn:Disconnect() end
+					end
+				end)
+				track(endedConn)
+			end
+		end))
+
+		track(handle.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+				dragInput = input
+			end
+		end))
+	end
+
+	-- Make both the collapsed planet and the expanded title/top bar draggable
+	makeDraggable(CollapsedView)
+	makeDraggable(HeaderPill)
+	makeDraggable(TopDragZone)
+
+	track(UserInputService.InputChanged:Connect(function(input)
+		if isDragging and (input == dragInput or input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			OrbitCenter.Position = UDim2.new(
+				startPos.X.Scale,
+				startPos.X.Offset + delta.X,
+				startPos.Y.Scale,
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end))
+
+	track(UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			isDragging = false
+		end
+	end))
+
+	-- ===================================================================
+	--   NODE TARGETING & TRANSITIONS
+	-- ===================================================================
 	local function nodeTarget(i, total)
 		local a = ((i - 1) * (2 * math.pi / total)) - (math.pi / 2)
 		return math.cos(a) * WindowHandler.Radius, math.sin(a) * WindowHandler.Radius
 	end
 
-	-- idle look for a node (does NOT touch size/position)
 	local function resetTabVisuals(tab)
 		tw(tab.Frame, { BackgroundColor3 = Theme.NodeBg }, 0.2)
 		tw(tab.Stroke, {
@@ -697,7 +778,6 @@ function Orbital:CreateWindow(settings)
 		tw(tab.Frame, { Size = UDim2.new(0, 130, 0, 130) }, 0.2)
 	end
 
-	-- node leaves the ring and is absorbed by the core
 	local function flyIn(tab, delay)
 		task.delay(delay or 0, function()
 			local t = tw(tab.Frame, {
@@ -712,7 +792,6 @@ function Orbital:CreateWindow(settings)
 		end)
 	end
 
-	-- node pops back out of the core to its slot
 	local function flyOut(tab, i, delay, total)
 		task.delay(delay or 0, function()
 			if WindowHandler.IsExpanded or WindowHandler.IsMinimized or WindowHandler.Destroyed then return end
@@ -836,7 +915,7 @@ function Orbital:CreateWindow(settings)
 	--   NODE GENERATOR
 	-- ===================================================================
 	local function canHover()
-		return (not WindowHandler.IsExpanded) and (not WindowHandler.IsMinimized) and (not WindowHandler.InStartupAnim)
+		return (not WindowHandler.IsExpanded) and (not WindowHandler.IsMinimized) and (not WindowHandler.InStartupAnim) and (not isDragging)
 	end
 
 	local function createBaseNode(title, iconText, isClose)
@@ -940,7 +1019,6 @@ function Orbital:CreateWindow(settings)
 		return tab
 	end
 
-	-- keep ring spacing sensible when many tabs exist
 	function WindowHandler:RealignNodes()
 		local total = #self.Tabs
 		if total == 0 then return end
@@ -962,7 +1040,6 @@ function Orbital:CreateWindow(settings)
 	local function registerTab(tab)
 		table.insert(WindowHandler.Tabs, tab)
 		WindowHandler:RealignNodes()
-		-- added after startup? pop it in
 		if WindowHandler.Started and not WindowHandler.InStartupAnim and not WindowHandler.IsExpanded and not WindowHandler.IsMinimized then
 			local total = #WindowHandler.Tabs
 			tab.Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -972,9 +1049,7 @@ function Orbital:CreateWindow(settings)
 	end
 
 	-- ===================================================================
-	--   ✨ ORBITAL CAPTURE (startup animation)
-	--   1. planet forms   2. globe fades in   3. nodes swoop in & lock into orbit
-	--   4. shockwave + ding   5. title types in
+	--   STARTUP ANIMATION
 	-- ===================================================================
 	task.defer(function()
 		WindowHandler.InStartupAnim = true
@@ -982,20 +1057,17 @@ function Orbital:CreateWindow(settings)
 		task.wait(0.35)
 		if WindowHandler.Destroyed then return end
 
-		-- 1. ignition
 		glowTarget = 1
 		playSound(Orbital.Sounds.Open, 0.75, 1.0)
 		tw(CoreHolder, { Size = UDim2.new(0, 300, 0, 300) }, 0.65, Enum.EasingStyle.Back)
 		shockwave(Theme.AccentGlow, 120, 720, 1.1, 5)
 		task.wait(0.55)
 
-		-- 2. the globe fades in out of the dark
 		tw(CoreIcon, { TextTransparency = 0 }, 0.55)
 		shockwave(Theme.Deep, 200, 640, 0.9, 3)
 		task.wait(0.6)
 		if WindowHandler.Destroyed then return end
 
-		-- 3. orbital capture (nodes swoop in from deep space and lock into orbit)
 		playSound(Orbital.Sounds.Open, 1.15, 0.8)
 		shockwave(Theme.Accent, 220, 780, 1.3, 3)
 
@@ -1024,7 +1096,6 @@ function Orbital:CreateWindow(settings)
 			el = os.clock() - startT
 			local p = math.clamp(el / totalTime, 0, 1)
 
-			-- core relaxes from 300 -> 210 during orbital capture
 			local coreEase = TweenService:GetValue(p, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 			local cs = 300 - (90 * coreEase)
 			CoreHolder.Size = UDim2.new(0, cs, 0, cs)
@@ -1065,7 +1136,6 @@ function Orbital:CreateWindow(settings)
 			end
 		until el >= totalTime
 
-		-- 4. landing: shockwave + ding
 		playSound(Orbital.Sounds.Notify, 1.4, 1.0)
 		shockwave(Theme.AccentGlow, 210, 660, 0.9, 4)
 		task.wait(0.15)
@@ -1075,7 +1145,6 @@ function Orbital:CreateWindow(settings)
 			end)
 		end
 
-		-- 5. title types in
 		local upper = string.upper(winTitle)
 		for i = 1, #upper do
 			CoreTitle.Text = string.sub(upper, 1, i)
@@ -1085,7 +1154,6 @@ function Orbital:CreateWindow(settings)
 		WindowHandler.InStartupAnim = false
 		WindowHandler.Started = true
 
-		-- catch tabs registered mid-animation
 		local newTotal = #WindowHandler.Tabs
 		WindowHandler.Radius = math.max(235, (newTotal * 150) / (2 * math.pi))
 		for i, tab in ipairs(WindowHandler.Tabs) do
@@ -1100,7 +1168,7 @@ function Orbital:CreateWindow(settings)
 	end)
 
 	-- ===================================================================
-	--   MAIN ANIMATION LOOP (aurora borders, atmosphere, stars, moon, globe)
+	--   MAIN RENDER LOOP
 	-- ===================================================================
 	local t0 = os.clock()
 	local starTimer = 3
@@ -1118,7 +1186,6 @@ function Orbital:CreateWindow(settings)
 			end
 		end
 
-		-- atmosphere glow
 		glowIntensity = glowIntensity + (glowTarget - glowIntensity) * math.min(1, dt * 4)
 		local flick = math.clamp(0.5 + math.noise(t * 2.2, 3.71), 0, 1)
 		local sc = CoreScale.Scale
@@ -1130,11 +1197,9 @@ function Orbital:CreateWindow(settings)
 			g.BackgroundTransparency = 1 - ((1 - GLOW_BASE[i]) * glowIntensity * (0.78 + 0.22 * flick))
 		end
 
-		-- slow orbit-ring rotation (opposite directions)
 		OrbitRing.Rotation = (t * 7) % 360
 		BigOrbitRing.Rotation = (-t * 4) % 360
 
-		-- globe breathing + slow "rotation" (cycles the hemisphere emoji)
 		local pulse = 0.3 + 0.012 * math.sin(t * 2.4)
 		CoreIcon.Size = UDim2.new(pulse, 0, pulse, 0)
 		local gi = (math.floor(t / 1.8) % 3) + 1
@@ -1144,13 +1209,11 @@ function Orbital:CreateWindow(settings)
 			MiniEarth.Text = GLOBES[gi]
 		end
 
-		-- twinkling stars
 		for _, st in ipairs(stars) do
 			local blink = 0.5 + 0.5 * math.sin(t * st.speed + st.phase)
 			st.f.BackgroundTransparency = 1 - (st.max * (0.25 + 0.75 * blink) * glowIntensity)
 		end
 
-		-- orbiting moon with a comet tail
 		if moonOn and Moon then
 			local showMoon = coreDesign > 60 and glowIntensity > 0.25
 			Moon.Visible = showMoon
@@ -1173,7 +1236,6 @@ function Orbital:CreateWindow(settings)
 			end
 		end
 
-		-- shooting stars
 		if starsOn then
 			starTimer = starTimer - dt
 			if starTimer <= 0 then
@@ -1186,7 +1248,7 @@ function Orbital:CreateWindow(settings)
 	end))
 
 	-- ===================================================================
-	--   ACTION NODE (click -> callback, no page)
+	--   ACTION NODE
 	-- ===================================================================
 	function WindowHandler:CreateActionNode(tabName, icon, callback)
 		local isClose = (string.lower(tabName):find("close") ~= nil)
@@ -1194,7 +1256,7 @@ function Orbital:CreateWindow(settings)
 		registerTab(tab)
 
 		tab.ClickBtn.MouseButton1Click:Connect(function()
-			if self.IsExpanded or self.IsMinimized or self.InStartupAnim then return end
+			if self.IsExpanded or self.IsMinimized or self.InStartupAnim or isDragging then return end
 			playSound(Orbital.Sounds.Click, 1.1, 0.95)
 			tw(tab.Frame, { BackgroundColor3 = Theme.NodeActive, Size = UDim2.new(0, 120, 0, 120) }, 0.08)
 			shockwave(isClose and Theme.RedClose or Theme.Accent, 150, 260, 0.45, 2)
@@ -1208,7 +1270,7 @@ function Orbital:CreateWindow(settings)
 	end
 
 	-- ===================================================================
-	--   TAB (opens an options page inside the big disc)
+	--   TAB (OPTIONS VIEW)
 	-- ===================================================================
 	function WindowHandler:CreateTab(tabName, icon)
 		local tab = createBaseNode(tabName, icon, false)
@@ -1243,7 +1305,7 @@ function Orbital:CreateWindow(settings)
 		registerTab(tab)
 
 		track(tab.ClickBtn.MouseButton1Click:Connect(function()
-			if WindowHandler.IsExpanded or WindowHandler.IsMinimized or WindowHandler.InStartupAnim then return end
+			if WindowHandler.IsExpanded or WindowHandler.IsMinimized or WindowHandler.InStartupAnim or isDragging then return end
 			WindowHandler.IsExpanded = true
 			ExpandedReady = false
 			WindowHandler.CurrentActive = tab
@@ -1274,7 +1336,6 @@ function Orbital:CreateWindow(settings)
 
 		local TabElements = {}
 
-		-- ---------- card factory ----------
 		local function makeCapsule(h)
 			local Card = new("Frame", {
 				Size = UDim2.new(1, -12, 0, h or 58),
@@ -1323,7 +1384,6 @@ function Orbital:CreateWindow(settings)
 			return Card, stroke, Pip, bind
 		end
 
-		-- ---------- SECTION ----------
 		function TabElements:CreateSection(secName)
 			local sec = new("Frame", {
 				Size = UDim2.new(1, -12, 0, 34),
@@ -1350,7 +1410,6 @@ function Orbital:CreateWindow(settings)
 			}, line)
 		end
 
-		-- ---------- LABEL ----------
 		function TabElements:CreateLabel(text)
 			local Card = makeCapsule(40)
 			label({
@@ -1360,7 +1419,6 @@ function Orbital:CreateWindow(settings)
 			}, Card)
 		end
 
-		-- ---------- BUTTON ----------
 		function TabElements:CreateButton(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Button"
@@ -1406,7 +1464,6 @@ function Orbital:CreateWindow(settings)
 		end
 		TabElements.AddButton = TabElements.CreateButton
 
-		-- ---------- TOGGLE ----------
 		function TabElements:CreateToggle(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Toggle"
@@ -1482,7 +1539,6 @@ function Orbital:CreateWindow(settings)
 		end
 		TabElements.AddToggle = TabElements.CreateToggle
 
-		-- ---------- SLIDER ----------
 		function TabElements:CreateSlider(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Slider"
@@ -1599,7 +1655,6 @@ function Orbital:CreateWindow(settings)
 		end
 		TabElements.AddSlider = TabElements.CreateSlider
 
-		-- ---------- DROPDOWN ----------
 		function TabElements:CreateDropdown(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Dropdown"
@@ -1699,13 +1754,12 @@ function Orbital:CreateWindow(settings)
 			return api
 		end
 
-		-- ---------- KEYBIND ----------
 		function TabElements:CreateKeybind(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Keybind"
 			local currentKey = opts.Default or Enum.KeyCode.None
-			local callback = opts.Callback or function() end   -- fires when the key is PRESSED
-			local onChange = opts.OnChange or function() end   -- fires when the key is REBOUND
+			local callback = opts.Callback or function() end
+			local onChange = opts.OnChange or function() end
 
 			local Card, stroke, pip, bind = makeCapsule(56)
 
@@ -1756,7 +1810,6 @@ function Orbital:CreateWindow(settings)
 			end))
 		end
 
-		-- ---------- TEXT INPUT ----------
 		function TabElements:CreateInput(opts)
 			opts = opts or {}
 			local name = opts.Name or opts.Title or "Input"
@@ -1803,7 +1856,6 @@ function Orbital:CreateWindow(settings)
 			return api
 		end
 
-		-- ---------- PARAGRAPH (auto height) ----------
 		function TabElements:CreateParagraph(opts)
 			opts = opts or {}
 			local title = opts.Title or "Information"
@@ -1829,7 +1881,6 @@ function Orbital:CreateWindow(settings)
 		return TabElements
 	end
 
-	-- mount it
 	for _, p in ipairs(candidateParents()) do
 		local ok = pcall(function() ScreenGui.Parent = p end)
 		if ok and ScreenGui.Parent == p then break end

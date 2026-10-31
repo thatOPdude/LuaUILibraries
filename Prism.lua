@@ -1,7 +1,9 @@
 -- =======================================================================
---   💎 PRISM UI LIBRARY  v2.0  (Realistic 2.5D Gemstone Engine)
---   Point-light sheen reflections • internal crystal refraction
---   Perspective foreshortening • dynamic bevel illumination
+--   💎 PRISM UI LIBRARY  v3.0  (Crystal Engine)
+--   • Physically-coherent lighting: every facet, rim and glint reacts to
+--     the cursor as a single point light
+--   • Cinematic "crystallize" startup (implosion → flash → burst → orbit)
+--   • Keybind / dropdown / slider fixes, input-safety fixes
 -- =======================================================================
 
 local Players          = game:GetService("Players")
@@ -136,17 +138,6 @@ local PRISM_RED = ColorSequence.new({
 	ColorSequenceKeypoint.new(1.0, Color3.fromRGB(255, 70, 95)),
 })
 
--- Realistic point specular glint curve (sharp central gleam that tapers off)
-local GEM_SPECULAR = NumberSequence.new({
-	NumberSequenceKeypoint.new(0.00, 1.0),
-	NumberSequenceKeypoint.new(0.35, 1.0),
-	NumberSequenceKeypoint.new(0.48, 0.55),
-	NumberSequenceKeypoint.new(0.50, 0.25),
-	NumberSequenceKeypoint.new(0.52, 0.55),
-	NumberSequenceKeypoint.new(0.65, 1.0),
-	NumberSequenceKeypoint.new(1.00, 1.0),
-})
-
 local PTS = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } }
 local function perimeterPoint(u, R)
 	u = u % 1
@@ -161,6 +152,10 @@ local function tw(obj, props, duration, style, dir)
 	local anim = TweenService:Create(obj, info, props)
 	anim:Play()
 	return anim
+end
+
+local function ease(a, style, dir)
+	return TweenService:GetValue(a, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out)
 end
 
 local function playSound(soundId, pitch, volume)
@@ -185,6 +180,178 @@ local function playHoverSound(pitch, volume)
 end
 
 -- =======================================================================
+--   GEM LIGHTING TOOLKIT
+--   Light model: one point light (the cursor). Every gem derives
+--   a light vector L (direction * strength). Then:
+--     • facets facing L glow, facets facing away go dark
+--     • a rim-light arc hugs the edge that faces L
+--     • a 8-point sparkle glint slides toward L on the crystal face
+--     • the bevel gradient puts its bright end on the lit side
+-- =======================================================================
+
+-- soft glossy band (core only)
+local SOFT_GLOSS = NumberSequence.new({
+	NumberSequenceKeypoint.new(0.00, 1.0),
+	NumberSequenceKeypoint.new(0.28, 0.93),
+	NumberSequenceKeypoint.new(0.50, 0.55),
+	NumberSequenceKeypoint.new(0.72, 0.93),
+	NumberSequenceKeypoint.new(1.00, 1.0),
+})
+-- rim arc: invisible on the far side, bright on the side facing the light
+local RIM_ARC = NumberSequence.new({
+	NumberSequenceKeypoint.new(0.00, 1.0),
+	NumberSequenceKeypoint.new(0.48, 0.97),
+	NumberSequenceKeypoint.new(0.78, 0.50),
+	NumberSequenceKeypoint.new(1.00, 0.0),
+})
+-- inner recessed plate edge: faint all around, bright on the far wall
+local PLATE_ARC = NumberSequence.new({
+	NumberSequenceKeypoint.new(0.00, 0.80),
+	NumberSequenceKeypoint.new(0.55, 0.62),
+	NumberSequenceKeypoint.new(1.00, 0.0),
+})
+-- facet volume fade (lit side → shaded side)
+local FACET_FADE = NumberSequence.new(0, 0.6)
+-- sparkle flare (fades out at both ends)
+local FLARE_SEQ = NumberSequence.new({
+	NumberSequenceKeypoint.new(0.0, 1.0),
+	NumberSequenceKeypoint.new(0.5, 0.0),
+	NumberSequenceKeypoint.new(1.0, 1.0),
+})
+
+local FACET_NORMALS = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } }  -- top, right, bottom, left (screen)
+local FACET_QUAD    = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } } -- same facets in the 45°-rotated local space
+local FACET_DARK    = Color3.fromRGB(14, 10, 38)
+local FACET_LIGHT   = Color3.fromRGB(176, 140, 255)
+
+local function buildFacets(body, cornerPx, gap)
+	local list = {}
+	for i = 1, 4 do
+		local q = FACET_QUAD[i]
+		local f = new("Frame", {
+			AnchorPoint = Vector2.new(q[1] < 0 and 1 or 0, q[2] < 0 and 1 or 0),
+			Position = UDim2.new(0.5, q[1] * gap * 0.5, 0.5, q[2] * gap * 0.5),
+			Size = UDim2.new(0.5, -gap, 0.5, -gap),
+			BackgroundColor3 = FACET_DARK,
+			BackgroundTransparency = 0.6,
+			BorderSizePixel = 0,
+			ZIndex = 2,
+		}, body)
+		round(f, cornerPx)
+		local g = new("UIGradient", { Transparency = FACET_FADE, Rotation = 90 }, f)
+		list[i] = { f = f, g = g, n = FACET_NORMALS[i] }
+	end
+	return list
+end
+
+local function updateFacets(list, lx, ly, gradRot, boost, dim)
+	for i = 1, 4 do
+		local fc = list[i]
+		local k = math.clamp(fc.n[1] * lx + fc.n[2] * ly, 0, 1)
+		k = 0.06 + 0.94 * (k ^ 1.3)
+		fc.f.BackgroundColor3 = FACET_DARK:Lerp(FACET_LIGHT, k)
+		fc.f.BackgroundTransparency = math.clamp(0.66 - 0.46 * k - 0.12 * (boost or 0) + 0.3 * (dim or 0), 0.04, 1)
+		fc.g.Rotation = gradRot
+	end
+end
+
+local function buildRim(body, inset, cornerPx, thickness)
+	local rim = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(1, -inset * 2, 1, -inset * 2),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+	}, body)
+	round(rim, cornerPx)
+	local st = outline(rim, Color3.new(1, 1, 1), thickness, 0.4)
+	local g = new("UIGradient", { Transparency = RIM_ARC }, st)
+	return { frame = rim, stroke = st, grad = g }
+end
+
+local function buildGlint(parent, z, sizePx)
+	local holder = new("Frame", {
+		Name = "Glint",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0, sizePx, 0, sizePx),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = z,
+		Visible = false,
+	}, parent)
+
+	local function bar(w, h, rot, grad, zi)
+		local f = new("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			Size = UDim2.new(w[1], w[2], h[1], h[2]),
+			Rotation = rot,
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ZIndex = zi,
+		}, holder)
+		new("UIGradient", { Transparency = FLARE_SEQ, Rotation = grad }, f)
+		return f
+	end
+
+	local halo = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0.5, 0, 0.5, 0),
+		BackgroundColor3 = Theme.AccentGlow,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 1,
+	}, holder)
+	round(halo)
+
+	local flareH = bar({ 1, 0 }, { 0, 2 }, 0, 0, 2)
+	local flareV = bar({ 0, 2 }, { 1, 0 }, 0, 90, 2)
+	local d1 = bar({ 0.62, 0 }, { 0, 1.5 }, 45, 0, 2)
+	local d2 = bar({ 0.62, 0 }, { 0, 1.5 }, -45, 0, 2)
+
+	local dot = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0.16, 0, 0.16, 0),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+	}, holder)
+	round(dot)
+
+	return { holder = holder, halo = halo, flareH = flareH, flareV = flareV, d1 = d1, d2 = d2, dot = dot, size = sizePx }
+end
+
+-- dirx/diry: unit direction toward the light, mag: 0..1 light strength
+local function updateGlint(gl, dirx, diry, mag, intensity, scale)
+	local holder = gl.holder
+	local i = math.clamp(intensity, 0, 1)
+	if scale < 0.2 or i <= 0.02 then
+		if holder.Visible then holder.Visible = false end
+		return
+	end
+	if not holder.Visible then holder.Visible = true end
+
+	local l1 = math.max(1, math.abs(dirx) + math.abs(diry))
+	local r = (0.33 / l1) * math.min(1, mag * 1.25) -- stays inside the diamond
+	holder.Position = UDim2.new(0.5 + dirx * r, 0, 0.5 + diry * r, 0)
+	local sz = gl.size * scale * (0.6 + 0.55 * i)
+	holder.Size = UDim2.new(0, sz, 0, sz)
+
+	gl.dot.BackgroundTransparency = 1 - i
+	gl.halo.BackgroundTransparency = 1 - 0.24 * i
+	gl.flareH.BackgroundTransparency = 1 - i * 0.95
+	gl.flareV.BackgroundTransparency = 1 - i * 0.95
+	gl.d1.BackgroundTransparency = 1 - i * 0.55
+	gl.d2.BackgroundTransparency = 1 - i * 0.55
+end
+
+-- =======================================================================
 --   NOTIFICATIONS
 -- =======================================================================
 local NotifyHolder
@@ -198,14 +365,17 @@ local ACCENTS = {
 function Prism:Notify(config)
 	if not NotifyHolder or not NotifyHolder.Parent then return end
 	config = config or {}
-	local title    = config.Title or config.title or "💎 Notification"
-	local text     = config.Content or config.content or ""
-	local duration = config.Duration or config.duration or 3.5
+	local title    = tostring(config.Title or config.title or "💎 Notification")
+	local text     = tostring(config.Content or config.content or "")
+	local duration = tonumber(config.Duration or config.duration) or 3.5
 	local accent   = ACCENTS[string.lower(tostring(config.Type or config.type or "info"))] or ACCENTS.info
 
 	playSound(Prism.Sounds.Notify, 1, 0.95)
 
-	local textH = TextService:GetTextSize(text, 12, Enum.Font.Gotham, Vector2.new(280, 10000)).Y
+	local okSize, bounds = pcall(function()
+		return TextService:GetTextSize(text, 12, Enum.Font.Gotham, Vector2.new(280, 10000))
+	end)
+	local textH = okSize and bounds.Y or 14
 	local height = math.max(62, 40 + textH + 12)
 
 	local wrap = new("Frame", {
@@ -296,6 +466,10 @@ function Prism:CreateWindow(settings)
 		return c
 	end
 
+	-- keybind safety (so rebinding a key never also toggles the window)
+	local listeningBinds = 0
+	local lastBindCapture = 0
+
 	local spinners = {}
 	local function sweep(stroke, speed, seq)
 		local g = new("UIGradient", { Color = seq or PRISM, Rotation = math.random(0, 359) }, stroke)
@@ -310,6 +484,24 @@ function Prism:CreateWindow(settings)
 		IgnoreGuiInset = true,
 		DisplayOrder = 999,
 	})
+
+	-- cinematic overlays (startup only)
+	local Dim = new("Frame", {
+		Name = "Dim",
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 0,
+	}, ScreenGui)
+	local Flash = new("Frame", {
+		Name = "Flash",
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 9,
+	}, ScreenGui)
 
 	NotifyHolder = new("Frame", {
 		Name = "NotifyHolder",
@@ -377,7 +569,15 @@ function Prism:CreateWindow(settings)
 		addLayer(g, -0.9)
 		Glow[i] = g
 	end
+
+	-- runtime animation state (driven by the startup + render loop)
 	local glowIntensity, glowTarget = 0, 0
+	local glowKick = 0          -- brief glow overdrive (flash moments)
+	local coreSweep = 0         -- light sweep across the core during startup
+	local shardSpread = 1       -- 1 = orbit, 0 = collapsed to center
+	local shardForce = 0        -- forces shards visible during intro
+	local coreGlintBoost = 0    -- core sparkle flash
+	local expandMix = 0         -- 0 collapsed → 1 expanded
 
 	local shards = {}
 	if shardsOn then
@@ -418,21 +618,84 @@ function Prism:CreateWindow(settings)
 		ZIndex = 4,
 	}, Stage)
 
-	local function shockwave(color, fromD, toD, duration, thickness)
+	local FXTop = new("Frame", {
+		Name = "FXTop",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0, 0, 0, 0),
+		BackgroundTransparency = 1,
+		ZIndex = 9,
+	}, Stage)
+
+	local function shockwave(color, fromD, toD, duration, thickness, ox, oy, parent)
 		local ring = new("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.new(0.5, 0, 0.5, 0),
+			Position = UDim2.new(0.5, ox or 0, 0.5, oy or 0),
 			Size = UDim2.new(0, fromD * SQ, 0, fromD * SQ),
 			Rotation = 45,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-		}, FX)
+		}, parent or FX)
 		round(ring, 14)
 		local st = outline(ring, color, thickness or 4, 0.1)
 		tw(ring, { Size = UDim2.new(0, toD * SQ, 0, toD * SQ) }, duration, Enum.EasingStyle.Quint)
 		tw(st, { Transparency = 1, Thickness = 0.5 }, duration)
 		Debris:AddItem(ring, duration + 0.1)
 	end
+
+	-- horizontal / vertical lens streak
+	local function streak(color, length, thickness, vertical, duration)
+		local f = new("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			Size = vertical and UDim2.new(0, thickness, 0, 0) or UDim2.new(0, 0, 0, thickness),
+			BackgroundColor3 = color,
+			BorderSizePixel = 0,
+			ZIndex = 5,
+		}, FXTop)
+		new("UIGradient", {
+			Rotation = vertical and 90 or 0,
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.5, 0),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+		}, f)
+		local grow = duration * 0.35
+		tw(f, { Size = vertical and UDim2.new(0, thickness, 0, length) or UDim2.new(0, length, 0, thickness) }, grow, Enum.EasingStyle.Quint)
+		task.delay(grow, function()
+			if f.Parent then
+				tw(f, {
+					BackgroundTransparency = 1,
+					Size = vertical and UDim2.new(0, 0, 0, length) or UDim2.new(0, length, 0, 0),
+				}, duration - grow)
+			end
+		end)
+		Debris:AddItem(f, duration + 0.1)
+	end
+
+	-- startup seed (a pinpoint of light that the shards collapse into)
+	local SeedHalo = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0, 0, 0, 0),
+		Rotation = 45,
+		BackgroundColor3 = Theme.AccentGlow,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 3,
+	}, FXTop)
+	round(SeedHalo, 20)
+	local Seed = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0, 0, 0, 0),
+		Rotation = 45,
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BorderSizePixel = 0,
+		ZIndex = 4,
+	}, FXTop)
+	round(Seed, 2)
 
 	local MiniGem = new("TextButton", {
 		Name = "MiniGem",
@@ -483,14 +746,18 @@ function Prism:CreateWindow(settings)
 	local CoreStroke = outline(Body, Color3.new(1, 1, 1), 4.5)
 	sweep(CoreStroke, 35)
 
+	local CoreFacets = buildFacets(Body, 10, 7)
+	local CoreRim = buildRim(Body, 9, 10, 2.4)
+
 	local BodySheen = new("Frame", {
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 0.45,
 		BorderSizePixel = 0,
-		ZIndex = 2,
+		ZIndex = 4,
 	}, Body)
 	round(BodySheen, 12)
-	local BodySheenGrad = new("UIGradient", { Rotation = 45, Transparency = GEM_SPECULAR }, BodySheen)
+	local BodySheenGrad = new("UIGradient", { Rotation = 45, Transparency = SOFT_GLOSS }, BodySheen)
 
 	local Inner1 = diamond(CoreRoot, { BackgroundTransparency = 1, ZIndex = 2 }, 0.72)
 	round(Inner1, 8)
@@ -540,6 +807,8 @@ function Prism:CreateWindow(settings)
 		addLayer(j, 0.6)
 		jewels[i] = j
 	end
+
+	local CoreGlint = buildGlint(CoreRoot, 5, 96)
 
 	local CollapsedView = new("Frame", {
 		Name = "CollapsedView",
@@ -741,6 +1010,7 @@ function Prism:CreateWindow(settings)
 		ExpandedReady = false
 		WindowHandler.IsExpanded = false
 		WindowHandler.CurrentActive = nil
+		Body.Active = false
 		playSound(Prism.Sounds.Click, 0.9)
 
 		for _, tab in ipairs(WindowHandler.Tabs) do
@@ -763,6 +1033,7 @@ function Prism:CreateWindow(settings)
 		self.IsExpanded = false
 		ExpandedReady = false
 		self.CurrentActive = nil
+		Body.Active = false
 		playSound(Prism.Sounds.Click, 0.85)
 		glowTarget = 0
 
@@ -788,6 +1059,8 @@ function Prism:CreateWindow(settings)
 		self.IsMinimized = false
 		playSound(Prism.Sounds.Open, 1.1)
 		glowTarget = 1
+		glowKick = 0.8
+		coreGlintBoost = 1
 
 		local hide = tw(MiniGem, { Position = UDim2.new(0.5, 0, -0.12, 0) }, 0.25)
 		hide.Completed:Connect(function()
@@ -813,6 +1086,10 @@ function Prism:CreateWindow(settings)
 		parallax = math.clamp(tonumber(v) or 1, 0, 3)
 	end
 
+	function WindowHandler:SetToggleKey(key)
+		toggleKey = key
+	end
+
 	function WindowHandler:Destroy()
 		if self.Destroyed then return end
 		self.Destroyed = true
@@ -836,6 +1113,7 @@ function Prism:CreateWindow(settings)
 
 	track(UserInputService.InputBegan:Connect(function(input, gpe)
 		if gpe or WindowHandler.Destroyed then return end
+		if listeningBinds > 0 or (os.clock() - lastBindCapture) < 0.2 then return end
 		if toggleKey and input.KeyCode == toggleKey then
 			if WindowHandler.IsMinimized then
 				WindowHandler:Restore()
@@ -847,7 +1125,7 @@ function Prism:CreateWindow(settings)
 	track(MiniGem.MouseButton1Click:Connect(function() WindowHandler:Restore() end))
 
 	-- ===================================================================
-	--   NODE GENERATOR (Multi-Layer Depth Planes)
+	--   NODE GENERATOR (facets • rim light • glint • depth planes)
 	-- ===================================================================
 	local function canHover()
 		return (not WindowHandler.IsExpanded) and (not WindowHandler.IsMinimized) and (not WindowHandler.InStartupAnim)
@@ -867,19 +1145,15 @@ function Prism:CreateWindow(settings)
 		}, BaseCenter)
 		local NodeScale = new("UIScale", nil, NodeFrame)
 
-		local NodeBody = diamond(NodeFrame, { BackgroundColor3 = Theme.NodeBg }, 1)
+		local NodeBody = diamond(NodeFrame, { BackgroundColor3 = Theme.NodeBg, ZIndex = 1 }, 1)
 		round(NodeBody, 8)
-		local NodeBevel = bevel(NodeBody, 170, 45)
+		local NodeBevel = bevel(NodeBody, 150, 45)
 		local NodeStroke = outline(NodeBody, Color3.new(1, 1, 1), 3, 0.5)
 		sweep(NodeStroke, isClose and 70 or 55, isClose and PRISM_RED or PRISM)
 
-		local NodeSheen = new("Frame", {
-			Size = UDim2.new(1, 0, 1, 0),
-			BackgroundColor3 = Color3.new(1, 1, 1),
-			BorderSizePixel = 0,
-		}, NodeBody)
-		round(NodeSheen, 8)
-		local NodeSheenGrad = new("UIGradient", { Rotation = 45, Transparency = GEM_SPECULAR }, NodeSheen)
+		-- four lit facets + rim-light arc (both react to the cursor)
+		local facets = buildFacets(NodeBody, 6, 4)
+		local rim = buildRim(NodeBody, 4, 5, 1.6)
 
 		-- Inner plate sits on an internal refractive plane
 		local InnerPlateHolder = new("Frame", {
@@ -894,6 +1168,10 @@ function Prism:CreateWindow(settings)
 		round(InnerPlate, 6)
 		local InnerPlateBevel = bevel(InnerPlate, 125, 45)
 		local NodeDecStroke = outline(InnerPlate, Theme.BorderDim, 1.2, 0.5)
+		local PlateGrad = new("UIGradient", { Transparency = PLATE_ARC }, NodeDecStroke)
+
+		-- sparkle glint rides on top of the crystal face (screen-aligned)
+		local glint = buildGlint(NodeFrame, 3, 40)
 
 		-- Float layer sits on the highest depth plane
 		local Float = new("Frame", {
@@ -901,7 +1179,7 @@ function Prism:CreateWindow(settings)
 			Position = UDim2.new(0.5, 0, 0.5, 0),
 			Size = UDim2.new(1, 0, 1, 0),
 			BackgroundTransparency = 1,
-			ZIndex = 3,
+			ZIndex = 4,
 		}, NodeFrame)
 
 		local NodeIcon = label({
@@ -932,7 +1210,7 @@ function Prism:CreateWindow(settings)
 			BackgroundTransparency = 1,
 			Text = "",
 			AutoButtonColor = false,
-			ZIndex = 4,
+			ZIndex = 5,
 		}, NodeFrame)
 
 		local tab = {
@@ -948,12 +1226,20 @@ function Prism:CreateWindow(settings)
 			InnerHolder = InnerPlateHolder,
 			InnerBevel = InnerPlateBevel,
 			BodyBevel = NodeBevel,
+			Facets = facets,
+			Rim = rim,
+			PlateGrad = PlateGrad,
+			Glint = glint,
 			Float = Float,
-			SheenGrad = NodeSheenGrad,
 			Title = title,
 			IsClose = isClose,
 			lift = 0,
 			liftT = 0,
+			lx = 0, ly = -0.5,       -- smoothed light vector
+			ang = -90,               -- last stable light angle (deg)
+			glintBoost = 0,
+			landed = false,
+			phase = math.random() * 6.28,
 		}
 
 		ClickBtn.MouseEnter:Connect(function()
@@ -1006,38 +1292,120 @@ function Prism:CreateWindow(settings)
 	end
 
 	-- ===================================================================
-	--   STARTUP ANIMATION
+	--   CINEMATIC STARTUP
+	--   1. world dims, a seed of light appears
+	--   2. shards implode into the seed
+	--   3. impact: flash, lens streaks, shockwaves, the crystal spins into
+	--      existence while shards burst back out to orbit
+	--   4. tabs spiral out of the core, spinning, each landing with a ping
+	--   5. title types in, final glow pulse, world un-dims
 	-- ===================================================================
-	task.defer(function()
-		WindowHandler.InStartupAnim = true
-		CoreRoot.Size = UDim2.new(0, 0, 0, 0)
-		task.wait(0.35)
-		if WindowHandler.Destroyed then return end
+	local function animate(duration, step)
+		local start = os.clock()
+		while true do
+			RunService.RenderStepped:Wait()
+			if WindowHandler.Destroyed then return false end
+			local a = math.clamp((os.clock() - start) / duration, 0, 1)
+			step(a)
+			if a >= 1 then break end
+		end
+		return true
+	end
 
+	task.defer(function()
+		local W = WindowHandler
+		W.InStartupAnim = true
+
+		-- hidden initial states
+		CoreRoot.Size = UDim2.new(0, 0, 0, 0)
+		Body.Rotation = 45 - 270
+		Inner1.Rotation = 45 + 200
+		Inner2.Rotation = 45 - 270
+		coreSweep = -1.2
+		shardSpread = 2.1
+		shardForce = 1
+		for _, j in ipairs(jewels) do j.Size = UDim2.new(0, 0, 0, 0) end
+
+		-- 1. dim + seed -------------------------------------------------
+		tw(Dim, { BackgroundTransparency = 0.5 }, 0.7)
+		task.wait(0.25)
+		if W.Destroyed then return end
+		playSound(Prism.Sounds.Open, 0.55, 0.7)
+		tw(SeedHalo, { Size = UDim2.new(0, 90, 0, 90), BackgroundTransparency = 0.82 }, 0.8)
+
+		-- 2. implosion --------------------------------------------------
+		local okConv = animate(1.05, function(a)
+			local e = ease(a, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+			shardSpread = 2.1 * (1 - e)
+			local s = 8 + a * 22 + math.sin(a * 40) * 2
+			Seed.Size = UDim2.new(0, s, 0, s)
+			Seed.Rotation = 45 + a * 180
+			local h = 90 - a * 30
+			SeedHalo.Size = UDim2.new(0, h, 0, h)
+		end)
+		if not okConv then return end
+
+		-- 3. impact -----------------------------------------------------
+		playSound(Prism.Sounds.Notify, 0.7, 1.0)
+		playSound(Prism.Sounds.Open, 0.85, 1.0)
 		glowTarget = 1
-		playSound(Prism.Sounds.Open, 0.75, 1.0)
-		tw(CoreRoot, { Size = UDim2.new(0, 330, 0, 330) }, 0.7, Enum.EasingStyle.Back)
-		shockwave(Theme.Ice, 140, 820, 1.1, 4)
-		task.wait(0.35)
+		glowKick = 1.3
+		coreGlintBoost = 1
+		Flash.BackgroundTransparency = 0.4
+		tw(Flash, { BackgroundTransparency = 1 }, 0.6)
+		tw(Seed, { Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1 }, 0.25)
+		tw(SeedHalo, { Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1 }, 0.3)
+		streak(Color3.fromRGB(235, 245, 255), 1500, 4, false, 0.9)
+		streak(Theme.AccentGlow, 560, 3, true, 0.9)
+		shockwave(Color3.new(1, 1, 1), 60, 760, 0.9, 5, 0, 0, FXTop)
+
+		tw(CoreRoot, { Size = UDim2.new(0, 330, 0, 330) }, 0.8, Enum.EasingStyle.Back)
+		tw(Body, { Rotation = 45 }, 1.0, Enum.EasingStyle.Quint)
+		tw(Inner1, { Rotation = 45 }, 1.0, Enum.EasingStyle.Quint)
+		tw(Inner2, { Rotation = 45 }, 1.0, Enum.EasingStyle.Quint)
+		tw(CoreStroke, { Thickness = 9 }, 0.15)
+		for i, j in ipairs(jewels) do
+			task.delay(0.15 + i * 0.07, function()
+				tw(j, { Size = UDim2.new(0, 12, 0, 12) }, 0.4, Enum.EasingStyle.Back)
+			end)
+		end
+
+		task.spawn(function()
+			animate(1.3, function(a)
+				shardSpread = ease(a, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+			end)
+		end)
+		task.spawn(function()
+			animate(1.2, function(a)
+				coreSweep = -1.2 + 2.4 * ease(a, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+			end)
+		end)
+
+		task.wait(0.18)
+		if W.Destroyed then return end
+		shockwave(Theme.Ice, 140, 860, 1.1, 4)
+		tw(CoreStroke, { Thickness = 4.5 }, 0.5)
+		task.wait(0.3)
+		if W.Destroyed then return end
 		shockwave(Theme.Accent, 140, 700, 1.0, 3)
-		tw(CoreStroke, { Thickness = 8 }, 0.2)
-		task.wait(0.2)
-		tw(CoreStroke, { Thickness = 4.5 }, 0.4)
-		task.wait(0.2)
+		task.wait(0.35)
+		if W.Destroyed then return end
 
 		tw(CoreIcon, { TextTransparency = 0 }, 0.5)
-		task.wait(0.55)
-		if WindowHandler.Destroyed then return end
+		task.wait(0.45)
+		if W.Destroyed then return end
 
+		-- 4. tabs spiral out -------------------------------------------
 		playSound(Prism.Sounds.Open, 1.15, 0.8)
 		shockwave(Theme.Pink, 220, 780, 1.2, 3)
 
-		local tabs   = WindowHandler.Tabs
+		local tabs   = W.Tabs
 		local total  = #tabs
 		local R      = nodeRadius(total)
-		WindowHandler.Radius = R
+		W.Radius = R
 		local tabDur, stagger = 1.3, 0.1
 		local totalTime = tabDur + math.max(0, total - 1) * stagger
+		local trailCols = { Theme.Ice, Theme.Pink, Theme.Accent }
 
 		for _, tab in ipairs(tabs) do
 			tab.Frame.Size = UDim2.new(0, 0, 0, 0)
@@ -1046,6 +1414,9 @@ function Prism:CreateWindow(settings)
 			tab.Stroke.Transparency = 0
 			tab.Stroke.Thickness = 4.8
 			tab.Icon.TextTransparency = 1
+			tab.landed = false
+			tab.Body.Rotation = 45 + 270
+			tab.InnerPlate.Rotation = 45 - 270
 		end
 
 		local startT = os.clock()
@@ -1053,23 +1424,23 @@ function Prism:CreateWindow(settings)
 		local el = 0
 		repeat
 			local dt = RunService.RenderStepped:Wait()
-			if WindowHandler.Destroyed then return end
+			if W.Destroyed then return end
 			el = os.clock() - startT
 			local p = math.clamp(el / totalTime, 0, 1)
 
-			local coreEase = TweenService:GetValue(p, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+			local coreEase = ease(p, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 			local cs = 330 - (80 * coreEase)
 			CoreRoot.Size = UDim2.new(0, cs, 0, cs)
 
 			trailTimer = trailTimer + dt
-			local doTrail = trailTimer > 0.045
+			local doTrail = trailTimer > 0.04
 			if doTrail then trailTimer = 0 end
 
 			for i, tab in ipairs(tabs) do
 				local tp = math.clamp((el - (i - 1) * stagger) / tabDur, 0, 1)
-				local sizeEase = TweenService:GetValue(tp, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-				local slide    = TweenService:GetValue(tp, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-				local grow     = TweenService:GetValue(math.min(1, tp * 1.5), Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+				local sizeEase = ease(tp, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+				local slide    = ease(tp, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+				local grow     = ease(math.min(1, tp * 1.5), Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 				local uFinal   = (i - 1) / total
 				local px, py   = perimeterPoint(uFinal * slide, R)
 				local x, y     = px * grow, py * grow
@@ -1079,6 +1450,18 @@ function Prism:CreateWindow(settings)
 				tab.Frame.Size = UDim2.new(0, s, 0, s)
 				tab.Icon.TextTransparency = 1 - math.clamp(tp * 1.6, 0, 1)
 
+				-- spin in: body one way, inner plate the other (parallax feel)
+				local spin = 1 - slide
+				tab.Body.Rotation = 45 + 270 * spin
+				tab.InnerPlate.Rotation = 45 - 270 * spin
+
+				if tp >= 1 and not tab.landed then
+					tab.landed = true
+					tab.glintBoost = 1
+					shockwave(Theme.AccentGlow, 90, 200, 0.55, 2, x, y, BaseCenter)
+					playSound(Prism.Sounds.Hover, 1.0 + i * 0.07, 0.45)
+				end
+
 				if doTrail and tp > 0 and tp < 0.9 then
 					local ts = math.random(4, 8)
 					local d = new("Frame", {
@@ -1086,7 +1469,7 @@ function Prism:CreateWindow(settings)
 						Position = UDim2.new(0.5, x, 0.5, y),
 						Size = UDim2.new(0, ts, 0, ts),
 						Rotation = 45,
-						BackgroundColor3 = (math.random() < 0.5) and Theme.Ice or Theme.Pink,
+						BackgroundColor3 = trailCols[math.random(1, #trailCols)],
 						BorderSizePixel = 0,
 						ZIndex = 1,
 					}, BaseCenter)
@@ -1096,8 +1479,17 @@ function Prism:CreateWindow(settings)
 			end
 		until el >= totalTime
 
+		for _, tab in ipairs(tabs) do
+			tab.Body.Rotation = 45
+			tab.InnerPlate.Rotation = 45
+		end
+
+		-- 5. finale -----------------------------------------------------
 		playSound(Prism.Sounds.Notify, 1.4, 1.0)
 		shockwave(Theme.AccentGlow, 210, 680, 0.9, 4)
+		glowKick = 0.9
+		coreGlintBoost = 1
+		tw(Dim, { BackgroundTransparency = 1 }, 0.9)
 		task.wait(0.15)
 		for i, tab in ipairs(tabs) do
 			task.delay((i - 1) * 0.04, function()
@@ -1108,15 +1500,18 @@ function Prism:CreateWindow(settings)
 		local upper = string.upper(winTitle)
 		for i = 1, #upper do
 			CoreTitle.Text = string.sub(upper, 1, i)
+			if i % 2 == 0 then playSound(Prism.Sounds.Hover, 1.8 + (i * 0.03), 0.18) end
 			task.wait(0.06)
 		end
+		shockwave(Theme.Ice, 180, 520, 0.7, 2.5)
 
-		WindowHandler.InStartupAnim = false
-		WindowHandler.Started = true
+		shardForce = 0
+		W.InStartupAnim = false
+		W.Started = true
 
-		local newTotal = #WindowHandler.Tabs
-		WindowHandler.Radius = nodeRadius(newTotal)
-		for i, tab in ipairs(WindowHandler.Tabs) do
+		local newTotal = #W.Tabs
+		W.Radius = nodeRadius(newTotal)
+		for i, tab in ipairs(W.Tabs) do
 			local x, y = nodeTarget(i, newTotal)
 			if not tab.Frame.Visible then
 				tab.Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -1125,14 +1520,19 @@ function Prism:CreateWindow(settings)
 				tw(tab.Frame, { Position = UDim2.new(0.5, x, 0.5, y) }, 0.45, Enum.EasingStyle.Back)
 			end
 		end
+		task.delay(1, function() if Dim.Parent then Dim:Destroy() end end)
 	end)
 
 	-- ===================================================================
-	--   2.5D REALISTIC GEMSTONE RENDER LOOP
+	--   RENDER LOOP — parallax + one-point-light gem shading
 	-- ===================================================================
 	local t0 = os.clock()
 	local pointer = Vector2.new(0, 0)
 	local mouseEnabled = UserInputService.MouseEnabled
+
+	-- core light state
+	local coreLX, coreLY = -0.3, -0.5
+	local coreDirX, coreDirY = -0.5, -0.85
 
 	track(RunService.RenderStepped:Connect(function(dt)
 		local t = os.clock() - t0
@@ -1146,15 +1546,12 @@ function Prism:CreateWindow(settings)
 			end
 		end
 
-		-- Normalized mouse vector (-1 to 1)
+		-- normalized pointer (-1..1) + the world-space light position
 		local cam = Workspace.CurrentCamera
 		local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
-		local tx, ty = 0, 0
-		local mouseScreenPos = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
-
+		local tx, ty
 		if mouseEnabled then
 			local ml = UserInputService:GetMouseLocation()
-			mouseScreenPos = ml
 			tx = math.clamp((ml.X - vp.X * 0.5) / (vp.X * 0.5), -1, 1)
 			ty = math.clamp((ml.Y - vp.Y * 0.5) / (vp.Y * 0.5), -1, 1)
 			tx = tx + math.sin(t * 0.6) * 0.04
@@ -1163,10 +1560,12 @@ function Prism:CreateWindow(settings)
 			tx = math.sin(t * 0.6) * 0.45
 			ty = math.cos(t * 0.45) * 0.35
 		end
+		local lightPos = Vector2.new(vp.X * 0.5 + tx * vp.X * 0.5, vp.Y * 0.5 + ty * vp.Y * 0.5)
+
 		pointer = pointer:Lerp(Vector2.new(tx, ty), 1 - math.exp(-dt * 9))
 		local px, py = pointer.X, pointer.Y
 
-		-- Whole stage moves with parallax
+		-- whole stage moves with parallax
 		Stage.Position = UDim2.new(0.5, px * 12 * parallax, 0.5, py * 9 * parallax)
 		local K = 26 * parallax
 		for _, l in ipairs(layers) do
@@ -1176,52 +1575,101 @@ function Prism:CreateWindow(settings)
 			)
 		end
 
-		-- Dynamic bevel lighting on the main crystal
-		local lightAngle = math.deg(math.atan2(py, px))
-		CoreBevel.Rotation = 45 + (px * 15)
-		Inner2Bevel.Rotation = 45 - (px * 20)
-		BodySheenGrad.Offset = Vector2.new(0.55 * (px + py) * math.max(0.4, parallax), 0)
+		-- state easing
+		expandMix = expandMix + (((WindowHandler.IsExpanded and 1) or 0) - expandMix) * math.min(1, dt * 6)
+		coreGlintBoost = math.max(0, coreGlintBoost - dt * 1.4)
+		glowKick = glowKick * math.exp(-dt * 2.2)
 
 		-- ===============================================================
-		--   PER-DIAMOND POINT-LIGHT & 3D REFRACTION CALCULATION
+		--   CORE CRYSTAL LIGHTING
 		-- ===============================================================
+		local plen = math.sqrt(px * px + py * py)
+		local tdx, tdy = coreDirX, coreDirY
+		if plen > 0.03 then tdx, tdy = px / plen, py / plen end
+		local tmag = math.clamp(plen * 1.6, 0.3, 1)
+		local ca = 1 - math.exp(-dt * 7)
+		coreLX = coreLX + (tdx * tmag - coreLX) * ca
+		coreLY = coreLY + (tdy * tmag - coreLY) * ca
+		local cmag = math.sqrt(coreLX * coreLX + coreLY * coreLY)
+		if cmag > 0.02 then
+			coreDirX, coreDirY = coreLX / cmag, coreLY / cmag
+		end
+		local cang = math.deg(math.atan2(coreDirY, coreDirX))
+		local cLit, cAway = cang - 45, cang + 135
+
+		CoreBevel.Rotation = cAway
+		Inner2Bevel.Rotation = cLit
+		BodySheenGrad.Rotation = cLit
+		BodySheenGrad.Offset = Vector2.new(math.clamp(0.2 * cmag + coreSweep * 0.9, -1, 1), 0)
+		updateFacets(CoreFacets, coreLX, coreLY, cAway, coreGlintBoost * 0.8, expandMix)
+		CoreRim.grad.Rotation = cLit
+		CoreRim.stroke.Transparency = 1 - math.clamp((0.35 + 0.65 * cmag) * (1 - expandMix * 0.7), 0, 1)
+
+		local coreSize = CoreRoot.Size.X.Offset
+		local coreVis = (1 - expandMix) * math.clamp(coreSize / 200, 0, 1)
+		local coreI = coreVis * (0.55 + 0.2 * math.sin(t * 1.9)) + coreGlintBoost
+		updateGlint(CoreGlint, coreDirX, coreDirY, cmag, math.min(1, coreI), 1)
+
+		-- ===============================================================
+		--   PER-TAB POINT LIGHT (smoothed, no flicker near the cursor)
+		-- ===============================================================
+		local stageScale = StageScale.Scale
 		for _, tab in ipairs(WindowHandler.Tabs) do
 			tab.lift = tab.lift + (tab.liftT - tab.lift) * math.min(1, dt * 14)
+			tab.glintBoost = math.max(0, tab.glintBoost - dt * 1.8)
 
-			if tab.Frame.Visible then
-				local tabCenter = tab.Frame.AbsolutePosition + (tab.Frame.AbsoluteSize * 0.5)
-				local diff = mouseScreenPos - tabCenter
+			local frame = tab.Frame
+			if frame.Visible and frame.AbsoluteSize.X > 4 then
+				local center = frame.AbsolutePosition + frame.AbsoluteSize * 0.5
+				local diff = lightPos - center
 				local dist = diff.Magnitude
-				local normDiff = dist > 0 and (diff / dist) or Vector2.zero
+				local ux, uy = 0, -1
+				if dist > 0.5 then ux, uy = diff.X / dist, diff.Y / dist end
+				local mag = math.clamp(dist / 160, 0, 1) -- light is weaker right on top of the gem
 
-				-- 1. Point-light sheen angle & position on this specific diamond
-				local sheenOffset = math.clamp((normDiff.X + normDiff.Y) * 0.45, -0.7, 0.7)
-				tab.SheenGrad.Offset = Vector2.new(sheenOffset, 0)
-				local angle = math.deg(math.atan2(normDiff.Y, normDiff.X))
-				tab.SheenGrad.Rotation = 45 + (normDiff.X * 20)
+				local a = 1 - math.exp(-dt * 12)
+				tab.lx = tab.lx + (ux * mag - tab.lx) * a
+				tab.ly = tab.ly + (uy * mag - tab.ly) * a
+				local lx, ly = tab.lx, tab.ly
+				local lmag = math.sqrt(lx * lx + ly * ly)
+				if lmag > 0.03 then tab.ang = math.deg(math.atan2(ly, lx)) end
 
-				-- 2. Facet lighting rotates to face the cursor
-				tab.BodyBevel.Rotation = 45 + (normDiff.X * 18)
-				tab.InnerBevel.Rotation = 45 - (normDiff.Y * 18)
+				local lit  = tab.ang - 45   -- gradient rot pointing toward the light
+				local away = tab.ang + 135  -- gradient rot pointing away from the light
 
-				-- 3. Multi-layer refraction depth (Inner plate shifts inward, icon shifts outward)
-				local innerX = -normDiff.X * 4 * parallax
-				local innerY = -normDiff.Y * 4 * parallax
-				tab.InnerHolder.Position = UDim2.new(0.5, innerX, 0.5, innerY)
+				-- 1. bevels: bright end on the lit side (recessed plate is inverted)
+				tab.BodyBevel.Rotation = away
+				tab.InnerBevel.Rotation = lit
 
-				local floatX = (px * 8 * parallax) + (normDiff.X * 5)
-				local floatY = (py * 8 * parallax) + (normDiff.Y * 5) - (tab.lift * 12)
-				tab.Float.Position = UDim2.new(0.5, floatX, 0.5, floatY)
+				-- 2. facets + rim arc
+				updateFacets(tab.Facets, lx, ly, away, tab.glintBoost * 0.7 + tab.lift * 0.5, 0)
+				tab.Rim.grad.Rotation = lit
+				local rimStr = math.clamp((0.3 + 0.7 * math.min(1, lmag)) * (0.6 + 0.4 * tab.lift) + tab.glintBoost * 0.3, 0, 1)
+				tab.Rim.stroke.Transparency = 1 - rimStr
+				tab.PlateGrad.Rotation = away
 
-				-- 4. 3D Tilt perspective foreshortening
-				-- Diamonds tilting toward the mouse scale up slightly, away shrink slightly
-				local tiltDot = (normDiff.X * px + normDiff.Y * py)
-				local targetScale = 1 + (tiltDot * 0.045 * parallax)
-				tab.Scale.Scale = math.clamp(targetScale, 0.94, 1.06)
+				-- 3. refraction depth: inner plate shifts away from light, icon floats toward it
+				tab.InnerHolder.Position = UDim2.new(0.5, -lx * 4 * parallax, 0.5, -ly * 4 * parallax)
+				tab.Float.Position = UDim2.new(
+					0.5, (px * 8 * parallax) + (lx * 5),
+					0.5, (py * 8 * parallax) + (ly * 5) - (tab.lift * 12)
+				)
+
+				-- 4. foreshortening: gems tilting toward the light grow a hair
+				tab.Scale.Scale = math.clamp(1 + (lx * px + ly * py) * 0.04 * parallax, 0.95, 1.05)
+
+				-- 5. sparkle glint slides toward the light
+				local gdx, gdy = 0, -1
+				if lmag > 0.001 then gdx, gdy = lx / lmag, ly / lmag end
+				local gi = (0.3 + 0.7 * tab.lift) * (0.88 + 0.12 * math.sin(t * 2.6 + tab.phase)) + tab.glintBoost
+				local gscale = math.clamp(frame.AbsoluteSize.X / (130 * stageScale), 0, 1.25)
+				updateGlint(tab.Glint, gdx, gdy, lmag, math.min(1, gi), gscale)
+			elseif tab.Glint.holder.Visible then
+				tab.Glint.holder.Visible = false
 			end
 		end
 
-		-- Glow & shadow tracking
+		-- glow & shadow tracking
 		glowIntensity = glowIntensity + (glowTarget - glowIntensity) * math.min(1, dt * 4)
 		local flick = math.clamp(0.5 + math.noise(t * 2.2, 3.71), 0, 1)
 		local coreD = CoreRoot.Visible and CoreRoot.Size.X.Offset or 0
@@ -1231,7 +1679,8 @@ function Prism:CreateWindow(settings)
 				side = (coreD + (2 * GLOW_PADS[i] * (0.94 + 0.12 * flick))) * SQ
 			end
 			g.Size = UDim2.new(0, side, 0, side)
-			g.BackgroundTransparency = 1 - ((1 - GLOW_BASE[i]) * glowIntensity * (0.78 + 0.22 * flick))
+			g.BackgroundTransparency = math.clamp(
+				1 - ((1 - GLOW_BASE[i]) * glowIntensity * (0.78 + 0.22 * flick) * (1 + glowKick * 2.5)), 0, 1)
 		end
 		local shSide = coreD * SQ
 		Shadow.Size = UDim2.new(0, shSide, 0, shSide)
@@ -1243,19 +1692,19 @@ function Prism:CreateWindow(settings)
 			j.BackgroundTransparency = 0.05 + 0.4 * (0.5 + 0.5 * math.sin(t * 2 + i * 1.3))
 		end
 
-		local shardTarget = (WindowHandler.IsExpanded and 0.22 or 1) * glowIntensity
-		shardMul = shardMul + (shardTarget - shardMul) * math.min(1, dt * 3)
+		local shardTarget = (WindowHandler.IsExpanded and 0.22 or 1) * math.max(glowIntensity, shardForce)
+		shardMul = shardMul + (shardTarget - shardMul) * math.min(1, dt * (WindowHandler.InStartupAnim and 10 or 3))
 		for _, s in ipairs(shards) do
 			local ox = (px * K * s.depth) + (math.sin(t * s.sp + s.ph) * s.bob)
 			local oy = (py * K * s.depth) + (math.cos(t * s.sp * 0.8 + s.ph) * s.bob)
-			s.f.Position = UDim2.new(0.5, s.x + ox, 0.5, s.y + oy)
-			s.f.Rotation = 45 + (math.sin(t * s.sp + s.ph) * 25)
-			s.f.BackgroundTransparency = 1 - (s.a * shardMul * (0.7 + 0.3 * math.sin(t * s.sp * 2 + s.ph)))
+			s.f.Position = UDim2.new(0.5, (s.x * shardSpread) + ox, 0.5, (s.y * shardSpread) + oy)
+			s.f.Rotation = 45 + (math.sin(t * s.sp + s.ph) * 25) + (1 - math.min(1, shardSpread)) * 180
+			s.f.BackgroundTransparency = 1 - math.clamp(s.a * shardMul * (0.7 + 0.3 * math.sin(t * s.sp * 2 + s.ph)), 0, 1)
 		end
 	end))
 
 	-- ===================================================================
-	--   ACTION NODE (Uses clean standard 'X' for glyph safety)
+	--   ACTION NODE
 	-- ===================================================================
 	function WindowHandler:CreateActionNode(tabName, icon, callback)
 		local isClose = (string.lower(tabName):find("close") ~= nil)
@@ -1268,15 +1717,17 @@ function Prism:CreateWindow(settings)
 		registerTab(tab)
 
 		tab.ClickBtn.MouseButton1Click:Connect(function()
-			if self.IsExpanded or self.IsMinimized or self.InStartupAnim then return end
+			if self.IsExpanded or self.IsMinimized or self.InStartupAnim or self.Destroyed then return end
 			playSound(Prism.Sounds.Click, 1.1, 0.95)
+			tab.glintBoost = 1
 			tw(tab.Frame, { Size = UDim2.new(0, 120, 0, 120) }, 0.08)
 			tw(tab.Body, { BackgroundColor3 = Theme.NodeActive }, 0.08)
-			shockwave(isClose and Theme.RedClose or Theme.Accent, 150, 280, 0.45, 2)
+			shockwave(isClose and Theme.RedClose or Theme.Accent, 150, 280, 0.45, 2, tab.Frame.Position.X.Offset, tab.Frame.Position.Y.Offset, BaseCenter)
 			task.delay(0.1, function()
 				if not self.IsExpanded and not self.IsMinimized and not self.Destroyed then
-					tw(tab.Frame, { Size = UDim2.new(0, 150, 0, 150) }, 0.2, Enum.EasingStyle.Back)
-					tw(tab.Body, { BackgroundColor3 = Theme.NodeHover }, 0.2)
+					local hovered = tab.liftT == 1
+					tw(tab.Frame, { Size = UDim2.new(0, hovered and 150 or 130, 0, hovered and 150 or 130) }, 0.2, Enum.EasingStyle.Back)
+					tw(tab.Body, { BackgroundColor3 = hovered and Theme.NodeHover or Theme.NodeBg }, 0.2)
 				end
 			end)
 			task.spawn(callback or function() end)
@@ -1325,10 +1776,11 @@ function Prism:CreateWindow(settings)
 		registerTab(tab)
 
 		track(tab.ClickBtn.MouseButton1Click:Connect(function()
-			if WindowHandler.IsExpanded or WindowHandler.IsMinimized or WindowHandler.InStartupAnim then return end
+			if WindowHandler.IsExpanded or WindowHandler.IsMinimized or WindowHandler.InStartupAnim or WindowHandler.Destroyed then return end
 			WindowHandler.IsExpanded = true
 			ExpandedReady = false
 			WindowHandler.CurrentActive = tab
+			Body.Active = true -- sink clicks so they don't leak into the game behind the menu
 			playSound(Prism.Sounds.Open, 1.15, 0.95)
 
 			for i, t in ipairs(WindowHandler.Tabs) do
@@ -1423,7 +1875,7 @@ function Prism:CreateWindow(settings)
 			}, sec)
 
 			label({
-				Text = string.upper(secName), Font = Enum.Font.GothamBold, TextSize = 13,
+				Text = string.upper(tostring(secName)), Font = Enum.Font.GothamBold, TextSize = 13,
 				TextColor3 = Theme.AccentGlow, TextXAlignment = Enum.TextXAlignment.Left,
 				Position = UDim2.new(0, 30, 0, 8), Size = UDim2.new(1, -40, 0, 20),
 			}, sec)
@@ -1490,14 +1942,19 @@ function Prism:CreateWindow(settings)
 				Position = UDim2.new(1, -40, 0.5, -10), Size = UDim2.new(0, 20, 0, 20),
 			}, Card)
 
-			ClickArea.MouseButton1Click:Connect(function()
+			local function fire()
 				playSound(Prism.Sounds.Click, 1.0, 0.95)
 				local flash = tw(Card, { BackgroundColor3 = Color3.fromRGB(52, 38, 108) }, 0.1)
 				flash.Completed:Connect(function()
 					tw(Card, { BackgroundColor3 = Theme.CardHover }, 0.2)
 				end)
 				task.spawn(callback)
-			end)
+			end
+			ClickArea.MouseButton1Click:Connect(fire)
+
+			local api = {}
+			function api:Fire() fire() end
+			return api
 		end
 		TabElements.AddButton = TabElements.CreateButton
 
@@ -1548,7 +2005,7 @@ function Prism:CreateWindow(settings)
 				AnchorPoint = Vector2.new(0.5, 0.5),
 				Position = state and UDim2.new(1, -9, 0.5, 0) or UDim2.new(0, 9, 0.5, 0),
 				Size = UDim2.new(0, 14, 0, 14),
-				Rotation = 45,
+				Rotation = state and 225 or 45,
 				BackgroundColor3 = Color3.fromRGB(245, 241, 255),
 				BorderSizePixel = 0,
 			}, Switch)
@@ -1589,7 +2046,9 @@ function Prism:CreateWindow(settings)
 			local name = opts.Name or opts.Title or "Slider"
 			local min = tonumber(opts.Min) or 0
 			local max = tonumber(opts.Max) or 100
+			if max <= min then max = min + 1 end
 			local step = tonumber(opts.Increment or opts.Step) or 1
+			if step <= 0 then step = 1 end
 			local def = math.clamp(tonumber(opts.Default) or min, min, max)
 			local callback = opts.Callback or function() end
 
@@ -1606,6 +2065,7 @@ function Prism:CreateWindow(settings)
 				return tostring(math.floor(v + 0.5))
 			end
 
+			local current = def
 			local Card, stroke, pip, bind = makeCapsule(70)
 
 			label({
@@ -1632,7 +2092,7 @@ function Prism:CreateWindow(settings)
 			outline(Track, Theme.BorderDim, 1, 0.3)
 			bind(Track)
 
-			local startPercent = (def - min) / math.max(0.0001, (max - min))
+			local startPercent = (def - min) / (max - min)
 			local Fill = new("Frame", {
 				Size = UDim2.new(startPercent, 0, 1, 0),
 				BackgroundColor3 = Theme.Accent,
@@ -1656,7 +2116,7 @@ function Prism:CreateWindow(settings)
 
 			local sliding = false
 			local function setVisual(v)
-				local pos = math.clamp((v - min) / math.max(0.0001, (max - min)), 0, 1)
+				local pos = math.clamp((v - min) / (max - min), 0, 1)
 				valLbl.Text = formatVal(v)
 				tw(Fill, { Size = UDim2.new(pos, 0, 1, 0) }, 0.05)
 			end
@@ -1664,10 +2124,11 @@ function Prism:CreateWindow(settings)
 			local function updateFromInput(input)
 				local pos = math.clamp((input.Position.X - Track.AbsolutePosition.X) / math.max(1, Track.AbsoluteSize.X), 0, 1)
 				local rawVal = min + ((max - min) * pos)
-				local stepped = math.floor((rawVal / step) + 0.5) * step
+				local stepped = min + math.floor(((rawVal - min) / step) + 0.5) * step
 				local v = math.clamp(stepped, min, max)
+				current = tonumber(formatVal(v)) or v
 				setVisual(v)
-				task.spawn(callback, tonumber(formatVal(v)) or v)
+				task.spawn(callback, current)
 			end
 
 			Track.InputBegan:Connect(function(input)
@@ -1693,9 +2154,11 @@ function Prism:CreateWindow(settings)
 			local api = {}
 			function api:Set(v, fire)
 				v = math.clamp(tonumber(v) or min, min, max)
+				current = v
 				setVisual(v)
 				if fire then task.spawn(callback, v) end
 			end
+			function api:Get() return current end
 			return api
 		end
 		TabElements.AddSlider = TabElements.CreateSlider
@@ -1754,52 +2217,74 @@ function Prism:CreateWindow(settings)
 				if fire then task.spawn(callback, selected) end
 			end
 
+			local function expandedHeight()
+				return collapsedHeight + (#items * (itemHeight + 4)) + 10
+			end
+
 			local function collapse()
 				expanded = false
 				tw(Arrow, { Rotation = 0 }, 0.2)
 				tw(Card, { Size = UDim2.new(1, -12, 0, collapsedHeight) }, 0.25)
 			end
 
-			for idx, item in ipairs(items) do
-				local itmBtn = new("TextButton", {
-					Size = UDim2.new(1, 0, 0, itemHeight),
-					BackgroundColor3 = Color3.fromRGB(24, 19, 52),
-					BorderSizePixel = 0,
-					Font = Enum.Font.Gotham,
-					TextSize = 13,
-					TextColor3 = Theme.TextPrimary,
-					Text = "   " .. tostring(item),
-					TextXAlignment = Enum.TextXAlignment.Left,
-					AutoButtonColor = false,
-					LayoutOrder = idx,
-				}, ListHolder)
-				round(itmBtn, 6)
+			local function rebuild()
+				for _, c in ipairs(ListHolder:GetChildren()) do
+					if c:IsA("TextButton") then c:Destroy() end
+				end
+				ListHolder.Size = UDim2.new(1, -24, 0, #items * (itemHeight + 4))
 
-				itmBtn.MouseEnter:Connect(function()
-					playHoverSound(1.85, 0.5)
-					tw(itmBtn, { BackgroundColor3 = Theme.CardHover, TextColor3 = Theme.AccentGlow }, 0.12)
-				end)
-				itmBtn.MouseLeave:Connect(function()
-					tw(itmBtn, { BackgroundColor3 = Color3.fromRGB(24, 19, 52), TextColor3 = Theme.TextPrimary }, 0.12)
-				end)
-				itmBtn.MouseButton1Click:Connect(function()
-					playSound(Prism.Sounds.Click, 1.2, 0.9)
-					choose(item, true)
-					collapse()
-				end)
+				for idx, item in ipairs(items) do
+					local itmBtn = new("TextButton", {
+						Size = UDim2.new(1, 0, 0, itemHeight),
+						BackgroundColor3 = Color3.fromRGB(24, 19, 52),
+						BorderSizePixel = 0,
+						Font = Enum.Font.Gotham,
+						TextSize = 13,
+						TextColor3 = Theme.TextPrimary,
+						Text = "   " .. tostring(item),
+						TextXAlignment = Enum.TextXAlignment.Left,
+						AutoButtonColor = false,
+						LayoutOrder = idx,
+					}, ListHolder)
+					round(itmBtn, 6)
+
+					itmBtn.MouseEnter:Connect(function()
+						playHoverSound(1.85, 0.5)
+						tw(itmBtn, { BackgroundColor3 = Theme.CardHover, TextColor3 = Theme.AccentGlow }, 0.12)
+					end)
+					itmBtn.MouseLeave:Connect(function()
+						tw(itmBtn, { BackgroundColor3 = Color3.fromRGB(24, 19, 52), TextColor3 = Theme.TextPrimary }, 0.12)
+					end)
+					itmBtn.MouseButton1Click:Connect(function()
+						playSound(Prism.Sounds.Click, 1.2, 0.9)
+						choose(item, true)
+						collapse()
+					end)
+				end
+
+				if expanded then
+					tw(Card, { Size = UDim2.new(1, -12, 0, expandedHeight()) }, 0.25, Enum.EasingStyle.Quint)
+				end
 			end
+			rebuild()
 
 			HeaderBtn.MouseButton1Click:Connect(function()
 				expanded = not expanded
 				playSound(Prism.Sounds.Click, 1.0, 0.9)
-				local targetH = expanded and (collapsedHeight + (#items * (itemHeight + 4)) + 10) or collapsedHeight
 				tw(Arrow, { Rotation = expanded and 180 or 0 }, 0.25)
-				tw(Card, { Size = UDim2.new(1, -12, 0, targetH) }, 0.3, Enum.EasingStyle.Quint)
+				tw(Card, { Size = UDim2.new(1, -12, 0, expanded and expandedHeight() or collapsedHeight) }, 0.3, Enum.EasingStyle.Quint)
 			end)
 
 			local api = {}
 			function api:Set(v, fire) choose(v, fire) end
 			function api:Get() return selected end
+			function api:Refresh(newOptions, keepSelection)
+				items = newOptions or {}
+				if not keepSelection then
+					choose(items[1] or "Select...", false)
+				end
+				rebuild()
+			end
 			return api
 		end
 		TabElements.AddDropdown = TabElements.CreateDropdown
@@ -1836,7 +2321,9 @@ function Prism:CreateWindow(settings)
 
 			local listening = false
 			KeyBtn.MouseButton1Click:Connect(function()
+				if listening then return end
 				listening = true
+				listeningBinds = listeningBinds + 1
 				KeyBtn.Text = "..."
 				tw(KeyStroke, { Color = Theme.AccentGlow }, 0.15)
 				playSound(Prism.Sounds.Click, 1.25, 0.9)
@@ -1846,6 +2333,8 @@ function Prism:CreateWindow(settings)
 				if listening then
 					if input.UserInputType == Enum.UserInputType.Keyboard then
 						listening = false
+						listeningBinds = math.max(0, listeningBinds - 1)
+						lastBindCapture = os.clock()
 						tw(KeyStroke, { Color = Theme.BorderDim }, 0.15)
 						if input.KeyCode ~= Enum.KeyCode.Escape then
 							currentKey = input.KeyCode
@@ -1858,6 +2347,14 @@ function Prism:CreateWindow(settings)
 					task.spawn(callback, currentKey)
 				end
 			end))
+
+			local api = {}
+			function api:Set(key)
+				currentKey = key or Enum.KeyCode.None
+				KeyBtn.Text = currentKey == Enum.KeyCode.None and "None" or currentKey.Name
+			end
+			function api:Get() return currentKey end
+			return api
 		end
 		TabElements.AddKeybind = TabElements.CreateKeybind
 
@@ -1911,9 +2408,12 @@ function Prism:CreateWindow(settings)
 		function TabElements:CreateParagraph(opts)
 			opts = opts or {}
 			local title = opts.Title or "Information"
-			local content = opts.Content or ""
+			local content = tostring(opts.Content or "")
 
-			local textH = TextService:GetTextSize(content, 13, Enum.Font.Gotham, Vector2.new(320, 10000)).Y
+			local okSize, bounds = pcall(function()
+				return TextService:GetTextSize(content, 13, Enum.Font.Gotham, Vector2.new(310, 10000))
+			end)
+			local textH = okSize and bounds.Y or 16
 			local Card = makeCapsule(math.max(64, 44 + textH + 14))
 
 			label({

@@ -2220,7 +2220,7 @@ function Hallow:CreateWindow(cfg)
 			runeLabels[i] = rn
 		end
 
-		-- eight candles
+		-- eight candles (hidden until the circle is drawn)
 		local CANDLES = 8
 		local candles = {}
 		for i = 1, CANDLES do
@@ -2235,9 +2235,9 @@ function Hallow:CreateWindow(cfg)
 				BackgroundColor3 = Theme.Accent, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 1,
 			}, holder)
 			round(halo)
-			local body = new("Frame", {
-				AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.new(0, 8, 0, 26),
-				BackgroundColor3 = C(232, 224, 200), BorderSizePixel = 0, ZIndex = 2,
+			local body = new("Frame", { -- starts flat + invisible, rises later
+				AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.new(0, 8, 0, 0),
+				BackgroundColor3 = C(232, 224, 200), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 2,
 			}, holder)
 			round(body, UDim.new(0, 3))
 			bevel(body, 150)
@@ -2246,7 +2246,7 @@ function Hallow:CreateWindow(cfg)
 				BackgroundColor3 = Theme.Glow, BorderSizePixel = 0, ZIndex = 3,
 			}, holder)
 			round(flame)
-			candles[i] = { flame = flame, halo = halo, lit = false, cx = cx, cy = cy }
+			candles[i] = { holder = holder, body = body, flame = flame, halo = halo, lit = false, cx = cx, cy = cy }
 		end
 
 		-- centre sigil (the theme's icon)
@@ -2276,7 +2276,7 @@ function Hallow:CreateWindow(cfg)
 			spin += (spinTarget - spin) * math.min(1, dt * 2.5)
 			Runes.Rotation = (Runes.Rotation + spin * dt) % 360
 			for i, c in ipairs(candles) do
-				if c.lit then
+				if c.lit and c.holder.Parent then
 					local n = math.noise(t * 4, i * 3.7)
 					c.flame.Size = UDim2.new(0, 11 * (1 + n * 0.5), 0, 17 * (1 + n * 0.8))
 					c.halo.BackgroundTransparency = 0.8 + n * 0.1
@@ -2284,7 +2284,7 @@ function Hallow:CreateWindow(cfg)
 			end
 		end)
 
-		-- 1. dim the world, draw the circle
+		-- 1. dim the world, draw the circle FIRST
 		tw(Dim, { BackgroundTransparency = 0.38 }, 0.8)
 		task.wait(0.4)
 		if Win.Destroyed then conn:Disconnect() return end
@@ -2297,18 +2297,23 @@ function Hallow:CreateWindow(cfg)
 		for i, l in ipairs(runeLabels) do
 			task.delay(0.15 + i * 0.02, function() tw(l, { GroupTransparency = 0.05 }, 0.25) end)
 		end
-		task.wait(0.8)
+		task.wait(1.0) -- let the circle finish before any candle appears
+		if Win.Destroyed then conn:Disconnect() return end
 
-		-- 2. light the candles one by one
+		-- 2. candles rise out of the circle and ignite one by one
 		for i, c in ipairs(candles) do
 			playSound(Hallow.Sounds.Click, 0.7 + i * 0.1, 0.7)
-			tw(c.flame, { Size = UDim2.new(0, 11, 0, 17) }, 0.25, Easing.Back)
-			tw(c.halo, { Size = UDim2.new(0, 86, 0, 86), BackgroundTransparency = 0.82 }, 0.4)
-			shockwave(Stage, Theme.Glow, 14, 64, 0.45, 2, UDim2.new(0, c.cx, 0, c.cy - 6))
-			task.delay(0.28, function() c.lit = true end)
-			task.wait(0.14)
+			tw(c.body, { Size = UDim2.new(0, 8, 0, 26), BackgroundTransparency = 0 }, 0.28, Easing.Back)
+			task.delay(0.2, function()
+				if not c.holder.Parent then return end
+				tw(c.flame, { Size = UDim2.new(0, 11, 0, 17) }, 0.25, Easing.Back)
+				tw(c.halo, { Size = UDim2.new(0, 86, 0, 86), BackgroundTransparency = 0.82 }, 0.4)
+				shockwave(Stage, Theme.Glow, 14, 64, 0.45, 2, UDim2.new(0, c.cx, 0, c.cy - 6))
+				task.delay(0.28, function() c.lit = true end)
+			end)
+			task.wait(0.15)
 		end
-		task.wait(0.25)
+		task.wait(0.5)
 		if Win.Destroyed then conn:Disconnect() return end
 
 		-- 3. the sigil rises, the circle spins up
@@ -2331,6 +2336,7 @@ function Hallow:CreateWindow(cfg)
 			c.lit = false
 			tw(c.flame, { Size = UDim2.new(0, 0, 0, 0) }, 0.25, Easing.Back, Dir.In)
 			tw(c.halo, { Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1 }, 0.3)
+			tw(c.body, { Size = UDim2.new(0, 8, 0, 0), BackgroundTransparency = 1 }, 0.3, Easing.Back, Dir.In)
 		end
 		tw(Runes, { Size = UDim2.new(0, S * 1.7, 0, S * 1.7) }, 0.7, Easing.Quint)
 		for _, l in ipairs(runeLabels) do tw(l, { GroupTransparency = 1 }, 0.5) end
@@ -2340,7 +2346,9 @@ function Hallow:CreateWindow(cfg)
 		tw(ringInnerS, { Transparency = 1 }, 0.6)
 		tw(sigil, { Size = UDim2.new(0, 0, 0, 0) }, 0.3, Easing.Back, Dir.In)
 		tw(sigilGlow, { Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1 }, 0.35)
-		task.wait(0.3)
+		task.wait(0.35)
+		-- candles are gone visually; remove them for real before the window opens
+		for _, c in ipairs(candles) do c.holder:Destroy() end
 		if Win.Destroyed then conn:Disconnect() return end
 
 		-- 5. the crypt door opens
@@ -2348,7 +2356,7 @@ function Hallow:CreateWindow(cfg)
 		if Win.Destroyed then conn:Disconnect() return end
 		tw(Dim, { BackgroundTransparency = 1 }, 0.9)
 		conn:Disconnect()
-		for _, o in ipairs(ritual) do Debris:AddItem(o, 1.5) end
+		for _, o in ipairs(ritual) do pcall(function() o:Destroy() end) end -- no leftovers
 
 		Win.InIntro = false
 		Win.Started = true

@@ -1,20 +1,32 @@
 --[[
-	☠  THE GRIMOIRE  ☠   Halloween UI library for Roblox  (v3.0)
+	☠  THE GRIMOIRE  ☠   Halloween UI library for Roblox  (v4.0 - 2.5D edition)
+
+	NEW IN 4.0
+	• ZERO emoji: every icon (pumpkin, bat, skull, ghost, spider, witch hat, potion, bone, candle,
+	  flame, crystal ball, moon, blood drop, bolt, sparkle, leaf, snowflake, gear, palette, dice...)
+	  is built from Frames / UICorners / gradients at runtime. Add your own with Hallow.Icons.myicon = function(root, pal) ... end
+	• 2.5D look: the window is a thick extruded slab with a cast shadow, cards are raised keys that lift
+	  on hover and press down on click, toggles / knobs / orb have drop shadows, and everything
+	  parallaxes against your cursor so the slab appears to turn toward the mouse.
 
 	• "The Summoning" intro: ritual circle, candles ignite one by one, runes spin up,
 	  lightning strikes, a swarm bursts out, then the window splits open like a crypt door
-	• A spider (or bat / skull / ghost, depending on theme) hangs from the window on a thread
+	• A spider (or bat / skull / ghost / crystal ball, depending on theme) hangs from the window on a thread
 	• Floating orb at the top of the screen reopens the UI after you minimize (draggable)
 	• 6 built-in themes, switched LIVE (lightning + shockwave + swarm), plus Hallow:AddTheme()
-	• Fog, drifting emoji, embers, sweeping border light, staggered card slide-ins
+	• Fog, drifting spirits, embers, sweeping border light, staggered card slide-ins
 	• Elements: Section, Label, Paragraph, Button, Toggle, Slider, Dropdown, Keybind, Input
 	• Window:CreateThemeTab() builds a ready-made Themes / Settings tab for you
 
+	ICON NAMES (use for tabs, buttons, themes)
+		pumpkin bat skull ghost spider hat potion bone candle flame orb moon drop bolt star leaf flake
+		gear palette dice check warn
+
 	USAGE
-		local Hallow = loadstring(readfile("Grimoire.lua"))()      -- or paste this file in
+		local Hallow = loadstring(game:HttpGet("<raw url of this file>"))()
 		local Win = Hallow:CreateWindow({ Title = "MY HAUNTED HUB", Theme = "Vampire" })
-		local Main = Win:CreateTab("Main", "🎃")
-		Main:CreateButton({ Name = "Boo", Callback = function() print("boo") end })
+		local Main = Win:CreateTab("Main", "pumpkin")
+		Main:CreateButton({ Name = "Boo", Icon = "ghost", Callback = function() print("boo") end })
 		Win:CreateThemeTab()
 ]]
 
@@ -49,7 +61,7 @@ end
 -- =======================================================================
 local function C(r, g, b) return Color3.fromRGB(r, g, b) end
 
-local Hallow = { SoundsEnabled = true, Version = "3.0" }
+local Hallow = { SoundsEnabled = true, Version = "4.0" }
 
 -- Swap these ids for any sound you like
 Hallow.Sounds = {
@@ -61,45 +73,46 @@ Hallow.Sounds = {
 	Thunder = "rbxassetid://4590662766",
 }
 
+-- Icon / Mascot / Swarm / Floaters are ICON NAMES (see list above). MascotRot 180 = hangs upside-down.
 Hallow.Themes = {
 	Pumpkin = {
 		Name = "Jack-o'-Lantern", Tag = "warm candlelight",
-		Icon = "🎃", Mascot = "🕷", MascotRot = 0, Swarm = "🎃", Floaters = { "🎃", "🍂", "🕸" },
+		Icon = "pumpkin", Mascot = "spider", MascotRot = 180, Swarm = "pumpkin", Floaters = { "pumpkin", "leaf", "candle" },
 		Bg = C(15, 7, 3), Panel = C(24, 11, 5), Card = C(34, 15, 6), CardHover = C(54, 23, 8),
 		Border = C(72, 31, 10), Accent = C(255, 140, 20), Glow = C(255, 206, 80), Dark = C(150, 66, 10),
 		Text = C(255, 241, 226), Muted = C(204, 152, 120), Fog = C(255, 120, 40),
 	},
 	Vampire = {
 		Name = "Vampire", Tag = "crimson & velvet",
-		Icon = "🧛", Mascot = "🦇", MascotRot = 180, Swarm = "🦇", Floaters = { "🦇", "🩸", "🕯" },
+		Icon = "bat", Mascot = "bat", MascotRot = 180, Swarm = "bat", Floaters = { "bat", "drop", "candle" },
 		Bg = C(14, 4, 8), Panel = C(23, 7, 13), Card = C(33, 10, 19), CardHover = C(54, 15, 28),
 		Border = C(78, 20, 38), Accent = C(228, 28, 62), Glow = C(255, 105, 125), Dark = C(122, 10, 32),
 		Text = C(255, 233, 236), Muted = C(203, 140, 152), Fog = C(190, 25, 55),
 	},
 	Horseman = {
 		Name = "Headless Horseman", Tag = "spectral hollow fire",
-		Icon = "🐎", Mascot = "💀", MascotRot = 0, Swarm = "🍂", Floaters = { "🍂", "💀", "🌙" },
+		Icon = "skull", Mascot = "skull", MascotRot = 0, Swarm = "leaf", Floaters = { "leaf", "skull", "moon" },
 		Bg = C(7, 11, 17), Panel = C(12, 19, 27), Card = C(16, 27, 36), CardHover = C(24, 44, 54),
 		Border = C(32, 66, 72), Accent = C(70, 235, 150), Glow = C(160, 255, 205), Dark = C(20, 120, 80),
 		Text = C(226, 250, 240), Muted = C(130, 175, 160), Fog = C(60, 200, 140),
 	},
 	Witch = {
 		Name = "Witch's Brew", Tag = "cauldron & starlight",
-		Icon = "🧙", Mascot = "🔮", MascotRot = 0, Swarm = "✨", Floaters = { "✨", "🔮", "🧪" },
+		Icon = "hat", Mascot = "orb", MascotRot = 0, Swarm = "star", Floaters = { "star", "orb", "potion" },
 		Bg = C(12, 6, 22), Panel = C(20, 10, 36), Card = C(28, 14, 48), CardHover = C(44, 22, 76),
 		Border = C(66, 36, 110), Accent = C(170, 90, 255), Glow = C(225, 170, 255), Dark = C(95, 45, 170),
 		Text = C(244, 234, 255), Muted = C(170, 145, 205), Fog = C(150, 80, 230),
 	},
 	Specter = {
 		Name = "Specter", Tag = "cold moonlit mist",
-		Icon = "👻", Mascot = "👻", MascotRot = 0, Swarm = "👻", Floaters = { "👻", "❄", "💨" },
+		Icon = "ghost", Mascot = "ghost", MascotRot = 0, Swarm = "ghost", Floaters = { "ghost", "flake", "moon" },
 		Bg = C(8, 13, 22), Panel = C(14, 22, 36), Card = C(20, 32, 50), CardHover = C(32, 50, 76),
 		Border = C(44, 72, 104), Accent = C(110, 200, 255), Glow = C(200, 240, 255), Dark = C(40, 100, 160),
 		Text = C(236, 246, 255), Muted = C(140, 170, 200), Fog = C(140, 200, 255),
 	},
 	Bone = {
 		Name = "Bone Yard", Tag = "ash & ancient bone",
-		Icon = "💀", Mascot = "🕷", MascotRot = 0, Swarm = "💀", Floaters = { "💀", "🦴", "🕸" },
+		Icon = "skull", Mascot = "spider", MascotRot = 180, Swarm = "skull", Floaters = { "skull", "bone", "spider" },
 		Bg = C(12, 12, 12), Panel = C(20, 20, 19), Card = C(28, 28, 26), CardHover = C(44, 43, 40),
 		Border = C(66, 64, 58), Accent = C(226, 218, 196), Glow = C(255, 250, 235), Dark = C(130, 124, 106),
 		Text = C(244, 240, 228), Muted = C(158, 152, 136), Fog = C(200, 195, 180),
@@ -135,6 +148,7 @@ local CENTER = Vector2.new(0.5, 0.5)
 local Easing, Dir = Enum.EasingStyle, Enum.EasingDirection
 local Left, Right = Enum.TextXAlignment.Left, Enum.TextXAlignment.Right
 local Reg, Bold, Semi = Enum.Font.Gotham, Enum.Font.GothamBold, Enum.Font.GothamSemibold
+local BLACK = Color3.new(0, 0, 0)
 
 local function new(class, props, parent)
 	local inst = Instance.new(class)
@@ -180,6 +194,14 @@ local function bevel(parent, darkness)
 	}, parent)
 end
 
+-- lit-from-above rim for a stroke (top bright, bottom faded) -> fake directional light
+local function rimLight(stroke)
+	return new("UIGradient", {
+		Rotation = 90,
+		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0.7) }),
+	}, stroke)
+end
+
 -- bright arcs that travel around a stroke (stroke colour gets multiplied by this)
 local SWEEP = ColorSequence.new({
 	ColorSequenceKeypoint.new(0.0, Color3.fromRGB(255, 255, 255)),
@@ -202,6 +224,8 @@ local function paint(inst, props, instant, dur)
 		tw(inst, props, dur or 0.5, Easing.Sine)
 	end
 end
+
+local function mix(a, b, t) return a:Lerp(b, t) end
 
 local function playSound(id, pitch, volume)
 	if not Hallow.SoundsEnabled or not id then return end
@@ -252,26 +276,323 @@ local function shockwave(parent, color, from, to, dur, thick, pos)
 	Debris:AddItem(ring, dur + 0.1)
 end
 
--- a swarm of emoji blasting out of a point (bats, pumpkins, leaves, ghosts...)
-local function burst(parent, emoji, count, o)
+-- =======================================================================
+--   ICON SET  (everything is drawn from Frames - no emoji, no images)
+--   Shapes are placed in a 0..1 box:  P(root, kind, centerX, centerY, w, h, color, rotation, bevelDarkness)
+--   kind: "ellipse" (fully rounded), "round" (soft rect), "rect"
+-- =======================================================================
+local function palette()
+	return { a = Theme.Accent, g = Theme.Glow, d = Theme.Dark, bg = Theme.Bg, t = Theme.Text }
+end
+
+local function P(parent, kind, x, y, w, h, col, rot, d)
+	local f = new("Frame", {
+		AnchorPoint = CENTER, Position = UDim2.fromScale(x, y), Size = UDim2.fromScale(w, h),
+		BackgroundColor3 = col, BorderSizePixel = 0, Rotation = rot or 0,
+	}, parent)
+	if kind == "ellipse" then
+		new("UICorner", { CornerRadius = UDim.new(0.5, 0) }, f)
+	elseif kind == "round" then
+		new("UICorner", { CornerRadius = UDim.new(0.3, 0) }, f)
+	end
+	if d then bevel(f, d) end
+	return f
+end
+
+local function HL(r, x, y, w, h, rot, a) -- soft white highlight
+	local f = P(r, "ellipse", x, y, w, h, Color3.new(1, 1, 1), rot)
+	f.BackgroundTransparency = a or 0.78
+	return f
+end
+
+local Icons = {}
+Hallow.Icons = Icons
+
+Icons.pumpkin = function(r, p)
+	local o1, o2, o3 = C(255, 146, 24), C(232, 108, 10), C(176, 70, 6)
+	local dk, gl = C(58, 22, 4), C(255, 224, 110)
+	P(r, "ellipse", 0.25, 0.60, 0.38, 0.58, o3, 0, 160)
+	P(r, "ellipse", 0.75, 0.60, 0.38, 0.58, o3, 0, 160)
+	P(r, "ellipse", 0.37, 0.59, 0.40, 0.68, o2, 0, 175)
+	P(r, "ellipse", 0.63, 0.59, 0.40, 0.68, o2, 0, 175)
+	P(r, "ellipse", 0.50, 0.58, 0.36, 0.72, o1, 0, 190)
+	P(r, "round", 0.53, 0.19, 0.11, 0.22, C(86, 120, 44), 14, 160)
+	P(r, "round", 0.37, 0.53, 0.115, 0.115, dk, 45)
+	P(r, "round", 0.63, 0.53, 0.115, 0.115, dk, 45)
+	P(r, "round", 0.37, 0.53, 0.06, 0.06, gl, 45)
+	P(r, "round", 0.63, 0.53, 0.06, 0.06, gl, 45)
+	P(r, "round", 0.50, 0.63, 0.06, 0.06, dk, 45)
+	P(r, "ellipse", 0.50, 0.75, 0.38, 0.11, dk)
+	P(r, "ellipse", 0.50, 0.75, 0.32, 0.065, gl)
+	P(r, "rect", 0.42, 0.715, 0.05, 0.05, o1)
+	P(r, "rect", 0.58, 0.785, 0.05, 0.05, o1)
+	HL(r, 0.31, 0.42, 0.06, 0.2, 10)
+end
+
+Icons.bat = function(r, p)
+	local dk = C(14, 6, 24)
+	local bc, wc, wm = mix(p.a, dk, 0.60), mix(p.a, dk, 0.40), mix(p.a, dk, 0.52)
+	for _, s in ipairs({ -1, 1 }) do
+		P(r, "ellipse", 0.5 + s * 0.27, 0.36, 0.44, 0.10, wc, s * -22, 175)
+		P(r, "ellipse", 0.5 + s * 0.22, 0.52, 0.38, 0.30, wm, s * -12, 165)
+		P(r, "ellipse", 0.5 + s * 0.40, 0.61, 0.15, 0.15, wm, 0, 165)
+		P(r, "ellipse", 0.5 + s * 0.30, 0.67, 0.15, 0.15, wm, 0, 165)
+		P(r, "ellipse", 0.5 + s * 0.20, 0.70, 0.15, 0.15, wm, 0, 165)
+		P(r, "round", 0.5 + s * 0.07, 0.25, 0.06, 0.14, bc, s * 14, 170)
+	end
+	P(r, "ellipse", 0.5, 0.55, 0.20, 0.38, bc, 0, 160)
+	P(r, "ellipse", 0.5, 0.37, 0.21, 0.20, mix(bc, p.g, 0.14), 0, 175)
+	for _, s in ipairs({ -1, 1 }) do
+		P(r, "ellipse", 0.5 + s * 0.05, 0.36, 0.045, 0.045, p.g)
+		P(r, "round", 0.5 + s * 0.028, 0.455, 0.02, 0.055, C(250, 250, 244))
+	end
+end
+
+Icons.skull = function(r, p)
+	local b1, b2, dk = C(238, 232, 214), C(212, 204, 182), C(24, 16, 22)
+	P(r, "round", 0.5, 0.71, 0.36, 0.28, b2, 0, 175)
+	P(r, "ellipse", 0.5, 0.42, 0.66, 0.60, b1, 0, 195)
+	P(r, "ellipse", 0.35, 0.46, 0.17, 0.19, dk)
+	P(r, "ellipse", 0.65, 0.46, 0.17, 0.19, dk)
+	P(r, "ellipse", 0.36, 0.47, 0.06, 0.07, p.g)
+	P(r, "ellipse", 0.64, 0.47, 0.06, 0.07, p.g)
+	P(r, "round", 0.5, 0.61, 0.07, 0.07, dk, 45)
+	for i = 1, 4 do P(r, "rect", 0.5 + (i - 2.5) * 0.075, 0.75, 0.016, 0.14, dk) end
+	HL(r, 0.29, 0.26, 0.10, 0.20, 18)
+end
+
+Icons.ghost = function(r, p)
+	local g1, g2, dk = C(238, 245, 255), C(196, 212, 238), C(30, 36, 60)
+	P(r, "ellipse", 0.13, 0.58, 0.24, 0.10, g2, -28)
+	P(r, "ellipse", 0.87, 0.58, 0.24, 0.10, g2, 28)
+	P(r, "ellipse", 0.50, 0.36, 0.58, 0.54, g1)
+	P(r, "rect", 0.50, 0.64, 0.58, 0.44, g1)
+	for i = -1, 1 do P(r, "ellipse", 0.5 + i * 0.2, 0.87, 0.20, 0.20, g1) end
+	P(r, "ellipse", 0.40, 0.38, 0.08, 0.11, dk)
+	P(r, "ellipse", 0.60, 0.38, 0.08, 0.11, dk)
+	P(r, "ellipse", 0.50, 0.56, 0.09, 0.12, dk)
+	local c1 = P(r, "ellipse", 0.31, 0.50, 0.08, 0.05, p.a)
+	local c2 = P(r, "ellipse", 0.69, 0.50, 0.08, 0.05, p.a)
+	c1.BackgroundTransparency, c2.BackgroundTransparency = 0.6, 0.6
+	HL(r, 0.31, 0.24, 0.10, 0.16, 15, 0.5)
+end
+
+Icons.spider = function(r, p)
+	local dk = C(18, 10, 24)
+	local bc, lc = mix(p.a, dk, 0.55), mix(p.a, dk, 0.42)
+	local ups = { -50, -20, 10, 40 }
+	for _, s in ipairs({ -1, 1 }) do
+		for i = 1, 4 do
+			local th = math.rad(ups[i])
+			local sx, sy, L1 = 0.5 + s * 0.08, 0.42 + (i - 1) * 0.06, 0.20
+			local dx, dy = math.cos(th) * s, math.sin(th)
+			P(r, "ellipse", sx + dx * L1 / 2, sy + dy * L1 / 2, L1, 0.035, lc, s * ups[i])
+			local ex, ey = sx + dx * L1, sy + dy * L1
+			local ph, L2 = math.rad(62), 0.22
+			local dx2, dy2 = math.cos(ph) * s, math.sin(ph)
+			P(r, "ellipse", ex + dx2 * L2 / 2, ey + dy2 * L2 / 2, L2, 0.03, lc, s * 62)
+		end
+	end
+	P(r, "ellipse", 0.5, 0.63, 0.34, 0.38, bc, 0, 165)
+	P(r, "ellipse", 0.5, 0.37, 0.22, 0.19, mix(bc, p.g, 0.12), 0, 175)
+	P(r, "round", 0.5, 0.65, 0.09, 0.09, p.g, 45)
+	P(r, "ellipse", 0.455, 0.355, 0.04, 0.04, C(255, 236, 232))
+	P(r, "ellipse", 0.545, 0.355, 0.04, 0.04, C(255, 236, 232))
+	HL(r, 0.42, 0.55, 0.07, 0.14, 15, 0.72)
+end
+
+Icons.hat = function(r, p)
+	local dk = C(24, 10, 40)
+	local cc, cd = mix(p.a, dk, 0.45), mix(p.a, dk, 0.62)
+	P(r, "round", 0.41, 0.46, 0.26, 0.66, cc, 11, 180)
+	P(r, "round", 0.59, 0.46, 0.26, 0.66, cc, -11, 180)
+	P(r, "round", 0.57, 0.12, 0.11, 0.22, cc, 38, 170)
+	P(r, "rect", 0.5, 0.69, 0.42, 0.075, mix(p.g, p.a, 0.35))
+	P(r, "round", 0.5, 0.69, 0.10, 0.11, C(244, 204, 84))
+	P(r, "round", 0.5, 0.69, 0.05, 0.06, cd)
+	P(r, "ellipse", 0.5, 0.80, 0.92, 0.17, cd, 0, 170)
+end
+
+Icons.potion = function(r, p)
+	local gl = C(200, 228, 246)
+	P(r, "round", 0.5, 0.31, 0.18, 0.32, gl, 0, 200)
+	P(r, "ellipse", 0.5, 0.66, 0.62, 0.62, gl, 0, 200)
+	P(r, "ellipse", 0.5, 0.70, 0.52, 0.50, p.a, 0, 170)
+	P(r, "ellipse", 0.42, 0.64, 0.07, 0.07, p.g)
+	P(r, "ellipse", 0.58, 0.74, 0.05, 0.05, p.g)
+	P(r, "ellipse", 0.52, 0.80, 0.04, 0.04, p.g)
+	P(r, "round", 0.5, 0.14, 0.20, 0.10, C(158, 108, 64), 0, 170)
+	HL(r, 0.34, 0.60, 0.07, 0.22, 14)
+end
+
+Icons.bone = function(r, p)
+	local b1 = C(238, 232, 214)
+	local th = math.rad(-40)
+	local dx, dy = math.cos(th), math.sin(th)
+	local px, py = -dy, dx
+	P(r, "round", 0.5, 0.5, 0.68, 0.15, b1, -40, 190)
+	for _, e in ipairs({ -1, 1 }) do
+		for _, q in ipairs({ -1, 1 }) do
+			P(r, "ellipse", 0.5 + dx * e * 0.34 + px * q * 0.065, 0.5 + dy * e * 0.34 + py * q * 0.065, 0.17, 0.17, b1, 0, 190)
+		end
+	end
+end
+
+Icons.flame = function(r, p)
+	P(r, "ellipse", 0.5, 0.66, 0.52, 0.52, p.a, 0, 190)
+	P(r, "ellipse", 0.52, 0.36, 0.22, 0.50, p.a, 10, 190)
+	P(r, "ellipse", 0.5, 0.70, 0.32, 0.34, p.g)
+	P(r, "ellipse", 0.5, 0.74, 0.16, 0.20, C(255, 252, 235))
+end
+
+Icons.candle = function(r, p)
+	local wax = C(238, 230, 206)
+	P(r, "ellipse", 0.5, 0.92, 0.62, 0.10, mix(p.d, BLACK, 0.4), 0, 170)
+	P(r, "round", 0.5, 0.69, 0.28, 0.46, wax, 0, 175)
+	P(r, "ellipse", 0.42, 0.50, 0.07, 0.12, wax, 0, 200)
+	P(r, "rect", 0.5, 0.435, 0.016, 0.07, C(40, 30, 24))
+	P(r, "ellipse", 0.5, 0.29, 0.16, 0.28, p.a, 0, 190)
+	P(r, "ellipse", 0.5, 0.32, 0.08, 0.16, p.g)
+end
+
+Icons.orb = function(r, p)
+	local dk = C(20, 10, 30)
+	P(r, "round", 0.5, 0.87, 0.58, 0.16, mix(p.a, dk, 0.55), 0, 170)
+	P(r, "ellipse", 0.5, 0.48, 0.76, 0.76, mix(p.a, dk, 0.35), 0, 150)
+	P(r, "ellipse", 0.5, 0.50, 0.64, 0.64, p.a, 0, 185)
+	local gl = P(r, "ellipse", 0.5, 0.58, 0.38, 0.34, p.g)
+	gl.BackgroundTransparency = 0.4
+	HL(r, 0.33, 0.30, 0.14, 0.20, 30, 0.5)
+end
+
+Icons.moon = function(r, p)
+	P(r, "ellipse", 0.5, 0.5, 0.84, 0.84, C(246, 238, 196), 0, 200)
+	P(r, "ellipse", 0.37, 0.37, 0.18, 0.18, C(214, 204, 160))
+	P(r, "ellipse", 0.63, 0.58, 0.22, 0.22, C(214, 204, 160))
+	P(r, "ellipse", 0.40, 0.70, 0.11, 0.11, C(214, 204, 160))
+	HL(r, 0.28, 0.5, 0.05, 0.3, 0, 0.6)
+end
+
+Icons.drop = function(r, p)
+	local red = C(204, 16, 40)
+	P(r, "round", 0.5, 0.36, 0.30, 0.30, red, 45, 190)
+	P(r, "ellipse", 0.5, 0.63, 0.50, 0.50, red, 0, 190)
+	HL(r, 0.37, 0.64, 0.09, 0.20, 12)
+end
+
+Icons.bolt = function(r, p)
+	local y1, y2 = C(255, 226, 84), C(255, 250, 214)
+	P(r, "round", 0.58, 0.30, 0.20, 0.48, y1, 24, 190)
+	P(r, "round", 0.50, 0.52, 0.42, 0.13, y1, -8, 190)
+	P(r, "round", 0.42, 0.73, 0.20, 0.46, y1, 24, 190)
+	P(r, "round", 0.58, 0.30, 0.07, 0.38, y2, 24)
+	P(r, "round", 0.42, 0.73, 0.07, 0.36, y2, 24)
+end
+
+Icons.star = function(r, p)
+	P(r, "ellipse", 0.5, 0.5, 0.13, 0.92, p.g)
+	P(r, "ellipse", 0.5, 0.5, 0.92, 0.13, p.g)
+	P(r, "ellipse", 0.5, 0.5, 0.08, 0.56, p.g, 45)
+	P(r, "ellipse", 0.5, 0.5, 0.08, 0.56, p.g, -45)
+	P(r, "ellipse", 0.5, 0.5, 0.20, 0.20, Color3.new(1, 1, 1))
+end
+
+Icons.leaf = function(r, p)
+	P(r, "ellipse", 0.5, 0.5, 0.40, 0.80, C(206, 98, 24), 38, 175)
+	P(r, "ellipse", 0.53, 0.46, 0.17, 0.58, C(238, 146, 44), 38)
+	P(r, "rect", 0.5, 0.5, 0.025, 0.72, C(140, 60, 12), 38)
+	P(r, "rect", 0.21, 0.86, 0.035, 0.15, C(110, 70, 30), 38)
+end
+
+Icons.flake = function(r, p)
+	local col = C(214, 240, 255)
+	for _, a in ipairs({ 0, 60, 120 }) do P(r, "ellipse", 0.5, 0.5, 0.07, 0.90, col, a) end
+	P(r, "ellipse", 0.5, 0.5, 0.20, 0.20, Color3.new(1, 1, 1))
+end
+
+Icons.gear = function(r, p)
+	local col = C(182, 190, 206)
+	for _, a in ipairs({ 0, 45, 90, 135 }) do P(r, "round", 0.5, 0.5, 0.20, 0.92, col, a, 190) end
+	P(r, "ellipse", 0.5, 0.5, 0.68, 0.68, col, 0, 190)
+	P(r, "ellipse", 0.5, 0.5, 0.30, 0.30, mix(p.bg, BLACK, 0.35))
+end
+
+Icons.palette = function(r, p)
+	P(r, "ellipse", 0.5, 0.52, 0.90, 0.74, C(214, 172, 124), 0, 190)
+	P(r, "ellipse", 0.70, 0.66, 0.16, 0.14, mix(p.bg, BLACK, 0.3))
+	P(r, "ellipse", 0.28, 0.42, 0.14, 0.14, p.a)
+	P(r, "ellipse", 0.46, 0.30, 0.14, 0.14, p.g)
+	P(r, "ellipse", 0.66, 0.34, 0.14, 0.14, p.d)
+	P(r, "ellipse", 0.30, 0.64, 0.13, 0.13, C(120, 200, 120))
+end
+
+Icons.dice = function(r, p)
+	local dk = C(32, 24, 30)
+	P(r, "round", 0.5, 0.5, 0.72, 0.72, C(244, 240, 228), 12, 195)
+	local pips = { { 0.5, 0.5 }, { 0.34, 0.34 }, { 0.66, 0.66 }, { 0.66, 0.34 }, { 0.34, 0.66 } }
+	for _, q in ipairs(pips) do
+		-- rotate pip positions by 12 degrees around the centre to match the die
+		local c, s = math.cos(math.rad(12)), math.sin(math.rad(12))
+		local x, y = q[1] - 0.5, q[2] - 0.5
+		P(r, "ellipse", 0.5 + x * c - y * s, 0.5 + x * s + y * c, 0.11, 0.11, dk)
+	end
+end
+
+Icons.check = function(r, p)
+	local g = C(125, 225, 110)
+	P(r, "ellipse", 0.30, 0.65, 0.30, 0.13, g, 45)
+	P(r, "ellipse", 0.60, 0.525, 0.62, 0.13, g, -48)
+end
+
+Icons.warn = function(r, p)
+	local dk = C(40, 28, 10)
+	P(r, "round", 0.5, 0.5, 0.64, 0.64, C(255, 205, 60), 45, 195)
+	P(r, "round", 0.5, 0.44, 0.08, 0.26, dk)
+	P(r, "ellipse", 0.5, 0.66, 0.09, 0.09, dk)
+end
+
+local function drawInto(root, name, pal)
+	for _, c in ipairs(root:GetChildren()) do c:Destroy() end
+	local fn = Icons[name]
+	if fn then
+		fn(root, pal or palette())
+	elseif name then
+		label({ Text = tostring(name), TextScaled = true, Size = UDim2.new(1, 0, 1, 0) }, root)
+	end
+end
+
+-- o: Size (number or UDim2), Position, AnchorPoint, ZIndex, Rotation, Pal
+local function mkIcon(name, parent, o)
+	o = o or {}
+	local sz = o.Size or 24
+	local root = new("CanvasGroup", {
+		AnchorPoint = o.AnchorPoint or Vector2.new(0, 0), Position = o.Position or UDim2.new(0, 0, 0, 0),
+		Size = (typeof(sz) == "number") and UDim2.new(0, sz, 0, sz) or sz,
+		BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = o.ZIndex or 1, Rotation = o.Rotation or 0,
+	}, parent)
+	if name then drawInto(root, name, o.Pal) end
+	return root
+end
+Hallow.DrawIcon = mkIcon
+
+-- a swarm of drawn icons blasting out of a point (bats, pumpkins, leaves, ghosts...)
+local function burst(parent, iconName, count, o)
 	o = o or {}
 	local life = o.Life or 2
 	local minS, maxS = o.MinSpeed or 260, o.MaxSpeed or 760
-	local s0 = o.Size0 or 16
+	local s0 = o.Size0 or 18
+	local pal = palette()
 	local items = {}
 	for i = 1, count do
 		local a = math.random() * math.pi * 2
 		local sp = minS + math.random() * (maxS - minS)
 		items[i] = {
-			l = label({
-				Text = emoji, TextSize = s0, AnchorPoint = CENTER,
-				Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(0, 64, 0, 64), ZIndex = 8,
-			}, parent),
+			l = mkIcon(iconName, parent, { Size = s0, AnchorPoint = CENTER, ZIndex = 8, Pal = pal }),
 			x = 0, y = 0,
 			vx = math.cos(a) * sp, vy = math.sin(a) * sp - (o.Lift or 140),
 			ph = math.random() * 6.28,
 			life = life * (0.7 + math.random() * 0.6), age = 0,
-			s0 = s0, s1 = (o.Size1 or 52) * (0.7 + math.random() * 0.5),
+			s0 = s0, s1 = (o.Size1 or 54) * (0.7 + math.random() * 0.5),
 		}
 	end
 	task.spawn(function()
@@ -295,10 +616,11 @@ local function burst(parent, emoji, count, o)
 						b.y += b.vy * dt
 						local sp = math.sqrt(b.vx * b.vx + b.vy * b.vy) + 1
 						local fl = math.sin(b.age * 16 + b.ph)
+						local sz = math.floor(b.s0 + (b.s1 - b.s0) * k)
+						l.Size = UDim2.new(0, sz, 0, sz)
 						l.Position = UDim2.new(0, b.x + (-b.vy / sp) * fl * 9, 0, b.y + (b.vx / sp) * fl * 9)
 						l.Rotation = fl * 22 + (b.vx / sp) * 15
-						l.TextSize = math.floor(b.s0 + (b.s1 - b.s0) * k)
-						l.TextTransparency = (k > 0.65) and ((k - 0.65) / 0.35) or 0
+						l.GroupTransparency = (k > 0.65) and ((k - 0.65) / 0.35) or 0
 					end
 				end
 			end
@@ -307,7 +629,7 @@ local function burst(parent, emoji, count, o)
 end
 
 -- =======================================================================
---   NOTIFICATIONS (slide-in toasts)
+--   NOTIFICATIONS (slide-in toasts, raised on a slab)
 -- =======================================================================
 local NotifyHolder
 
@@ -319,28 +641,37 @@ function Hallow:Notify(cfg)
 	local duration = cfg.Duration or cfg.duration or 4
 	local kind     = string.lower(tostring(cfg.Type or cfg.type or "info"))
 	local accent   = ({ info = Theme.Glow, success = Theme.Success, warn = Theme.Warn, error = Theme.Danger })[kind] or Theme.Glow
-	local icon     = ({ info = "🕯", success = "✔", warn = "⚠", error = "☠" })[kind] or "🕯"
+	local icon     = ({ info = "candle", success = "check", warn = "warn", error = "skull" })[kind] or "candle"
 
 	playSound(Hallow.Sounds.Notify, 1, 0.9)
 
 	local textH = TextService:GetTextSize(text, 12, Reg, Vector2.new(250, 10000)).Y
 	local height = math.max(64, 40 + textH + 16)
+	local DEPTH = 6
 
-	local wrap = new("Frame", { Size = UDim2.new(1, 0, 0, height), BackgroundTransparency = 1 }, NotifyHolder)
-	local toast = new("Frame", {
-		Size = UDim2.new(1, 0, 1, 0), Position = UDim2.new(1.2, 0, 0, 0),
-		BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.03,
-		BorderSizePixel = 0, ClipsDescendants = true,
+	local wrap = new("Frame", { Size = UDim2.new(1, 0, 0, height + DEPTH), BackgroundTransparency = 1 }, NotifyHolder)
+	local mover = new("Frame", {
+		Size = UDim2.new(1, 0, 1, 0), Position = UDim2.new(1.2, 0, 0, 0), BackgroundTransparency = 1,
 	}, wrap)
+	local slab = new("Frame", {
+		Position = UDim2.new(0, 0, 0, DEPTH), Size = UDim2.new(1, 0, 1, -DEPTH),
+		BackgroundColor3 = mix(accent, BLACK, 0.62), BorderSizePixel = 0, ZIndex = 1,
+	}, mover)
+	round(slab, UDim.new(0, 10))
+	local toast = new("Frame", {
+		Size = UDim2.new(1, 0, 1, -DEPTH),
+		BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0.03,
+		BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 2,
+	}, mover)
 	round(toast, UDim.new(0, 10))
 	bevel(toast, 190)
-	outline(toast, accent, 1.5, 0.15)
+	rimLight(outline(toast, accent, 1.5, 0.1))
 
 	new("Frame", { Size = UDim2.new(0, 4, 1, 0), BackgroundColor3 = accent, BorderSizePixel = 0 }, toast)
-	label({
-		Text = icon, TextSize = 20, TextColor3 = accent,
-		Position = UDim2.new(0, 14, 0, 8), Size = UDim2.new(0, 26, 0, 26),
-	}, toast)
+	mkIcon(icon, toast, {
+		Size = 26, Position = UDim2.new(0, 14, 0, 8),
+		Pal = { a = accent, g = accent, d = accent, bg = Theme.Bg, t = Theme.Text },
+	})
 	label({
 		Text = title, Font = Bold, TextSize = 14, TextColor3 = accent, TextXAlignment = Left,
 		Position = UDim2.new(0, 46, 0, 10), Size = UDim2.new(1, -56, 0, 18),
@@ -357,14 +688,14 @@ function Hallow:Notify(cfg)
 	}, toast)
 	round(bar)
 
-	tw(toast, { Position = UDim2.new(0, 0, 0, 0) }, 0.45, Easing.Back)
+	tw(mover, { Position = UDim2.new(0, 0, 0, 0) }, 0.45, Easing.Back)
 	tw(bar, { Size = UDim2.new(0, 0, 0, 2) }, duration, Easing.Linear)
 
 	local dismissed = false
 	local function dismiss()
 		if dismissed then return end
 		dismissed = true
-		local out = tw(toast, { Position = UDim2.new(1.2, 0, 0, 0) }, 0.3, Easing.Back, Dir.In)
+		local out = tw(mover, { Position = UDim2.new(1.2, 0, 0, 0) }, 0.3, Easing.Back, Dir.In)
 		out.Completed:Connect(function()
 			local shrink = tw(wrap, { Size = UDim2.new(1, 0, 0, 0) }, 0.2)
 			shrink.Completed:Connect(function() wrap:Destroy() end)
@@ -388,7 +719,10 @@ function Hallow:CreateWindow(cfg)
 	local toggleKey = cfg.ToggleKey
 	if toggleKey == nil then toggleKey = Enum.KeyCode.RightShift end -- pass false to disable
 	local introOn = cfg.Intro ~= false
-	local FX = { Embers = cfg.Embers ~= false, Floaters = cfg.Floaters ~= false, Fog = cfg.Fog ~= false }
+	local FX = {
+		Embers = cfg.Embers ~= false, Floaters = cfg.Floaters ~= false, Fog = cfg.Fog ~= false,
+		Parallax = cfg.Parallax ~= false,
+	}
 
 	-- theme: explicit > saved > Pumpkin
 	local startTheme = cfg.Theme
@@ -429,6 +763,12 @@ function Hallow:CreateWindow(cfg)
 		if key then bindTheme(l, { TextColor3 = key }) end
 		return l
 	end
+	-- icon that re-draws itself whenever the theme changes (name = nil -> follows the theme's main icon)
+	local function themedIcon(parent, name, o)
+		local root = mkIcon(nil, parent, o)
+		themed(function() drawInto(root, name or Theme.Icon, (o and o.Pal) or palette()) end)
+		return root
+	end
 
 	local spinners = {}
 	local function sweep(stroke, speed)
@@ -446,7 +786,7 @@ function Hallow:CreateWindow(cfg)
 	})
 
 	local Dim = new("Frame", {
-		Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0),
+		Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = BLACK,
 		BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 1,
 	}, ScreenGui)
 
@@ -480,7 +820,7 @@ function Hallow:CreateWindow(cfg)
 
 	local RootFX = new("Frame", { -- zero-size, Root centre: shockwaves & swarms
 		AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 0, 0, 0),
-		BackgroundTransparency = 1, ZIndex = 6,
+		BackgroundTransparency = 1, ZIndex = 25,
 	}, Root)
 
 	-- scaling to fit the viewport
@@ -510,13 +850,43 @@ function Hallow:CreateWindow(cfg)
 	end
 	local glowTarget, glowI = 0, 0
 
+	-- cast shadow on the "ground" (soft stacked layers, shifts with the cursor)
+	local Shadow = {}
+	for i = 1, 5 do
+		local s = new("Frame", {
+			AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 24), Size = UDim2.new(0, 0, 0, 0),
+			BackgroundColor3 = BLACK, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 2,
+		}, Root)
+		round(s, UDim.new(0, 14 + i * 7))
+		Shadow[i] = s
+	end
+
+	-- the extruded slab: stacked copies behind the window give it real thickness
+	local SLABS = 9
+	local Slab = {}
+	for k = SLABS, 1, -1 do
+		local s = new("Frame", {
+			AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 0, 0, 0),
+			BackgroundColor3 = Theme.Border, BorderSizePixel = 0, ZIndex = 3 + (SLABS - k),
+		}, Root)
+		round(s, UDim.new(0, 14))
+		Slab[k] = s
+	end
+	local function slabColor(k) return mix(Theme.Border, BLACK, (k - 1) / (SLABS - 1) * 0.82) end
+	themed(function(i)
+		for k = 1, SLABS do paint(Slab[k], { BackgroundColor3 = slabColor(k) }, i) end
+	end)
+	-- bright edge on the front lip of the slab
+	local SlabLip = outline(Slab[1], Theme.Accent, 1.2, 0.55)
+	bindTheme(SlabLip, { Color = "Accent" })
+
 	-- =====================================================================
 	--   THE WINDOW
 	-- =====================================================================
 	local Window = new("Frame", {
 		Name = "Window", AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0),
 		Size = UDim2.new(0, W, 0, H), BackgroundColor3 = Theme.Bg, BorderSizePixel = 0,
-		ClipsDescendants = true, ZIndex = 2,
+		ClipsDescendants = true, ZIndex = 20,
 	}, Root)
 	round(Window, UDim.new(0, 14))
 	bevel(Window, 200)
@@ -548,8 +918,8 @@ function Hallow:CreateWindow(cfg)
 	end
 
 	-- ---------- header ----------
-	local TAB_H, TAB_GAP, SB_W = 40, 4, 150
-	local HeaderIcon, TitleL
+	local TAB_H, TAB_GAP, SB_W = 42, 4, 150
+	local TitleL
 
 	local Header = new("Frame", {
 		Name = "Header", Size = UDim2.new(1, 0, 0, 56), BackgroundColor3 = Theme.Panel,
@@ -572,40 +942,67 @@ function Hallow:CreateWindow(cfg)
 			NumberSequenceKeypoint.new(0, 0.92), NumberSequenceKeypoint.new(0.5, 0.15), NumberSequenceKeypoint.new(1, 0.92),
 		}),
 	}, HeaderLine)
-
-	HeaderIcon = label({
-		Text = Theme.Icon, TextSize = 26, Position = UDim2.new(0, 14, 0, 0), Size = UDim2.new(0, 36, 1, 0), ZIndex = 5,
+	-- header "shelf": a shadow strip under the header so the content sits lower than the bar
+	local HeaderShade = new("Frame", {
+		Position = UDim2.new(0, 0, 1, 0), Size = UDim2.new(1, 0, 0, 10),
+		BackgroundColor3 = BLACK, BorderSizePixel = 0, ZIndex = 3,
 	}, Header)
+	new("UIGradient", {
+		Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 1) }),
+	}, HeaderShade)
+
+	-- the header icon sits on a little raised medallion
+	local Medal = new("Frame", {
+		Position = UDim2.new(0, 10, 0.5, -20), Size = UDim2.new(0, 40, 0, 40), BackgroundColor3 = Theme.Card,
+		BorderSizePixel = 0, ZIndex = 4,
+	}, Header)
+	round(Medal)
+	bevel(Medal, 170)
+	bindTheme(Medal, { BackgroundColor3 = "Card" })
+	rimLight(outline(Medal, Theme.Accent, 1.5, 0.3))
+	themedIcon(Medal, nil, { Size = 30, AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0), ZIndex = 5 })
+
 	TitleL = tl({
 		Text = "", Font = Bold, TextSize = 17, TextXAlignment = Left,
-		Position = UDim2.new(0, 56, 0, 10), Size = UDim2.new(0, 300, 0, 22), ZIndex = 5,
+		Position = UDim2.new(0, 60, 0, 10), Size = UDim2.new(0, 300, 0, 22), ZIndex = 5,
 	}, Header, "Glow")
 	tl({
 		Text = winSub, TextSize = 11, TextXAlignment = Left,
-		Position = UDim2.new(0, 56, 0, 32), Size = UDim2.new(0, 300, 0, 14), ZIndex = 5,
+		Position = UDim2.new(0, 60, 0, 32), Size = UDim2.new(0, 300, 0, 14), ZIndex = 5,
 	}, Header, "Muted")
 
-	local function headerBtn(text, xOff, danger)
+	local function headerBtn(kind, xOff, danger)
 		local b = new("TextButton", {
 			Size = UDim2.new(0, 28, 0, 28), Position = UDim2.new(1, xOff, 0.5, -14),
-			BackgroundColor3 = Theme.Card, BorderSizePixel = 0, Text = text, Font = Bold, TextSize = 14,
-			TextColor3 = Theme.Muted, AutoButtonColor = false, ZIndex = 6,
+			BackgroundColor3 = Theme.Card, BorderSizePixel = 0, Text = "", AutoButtonColor = false, ZIndex = 6,
 		}, Header)
 		round(b)
+		bevel(b, 175)
 		local st = outline(b, Theme.Border, 1.2)
+		local bars = {}
+		local function bar(rot, wd)
+			local f = new("Frame", {
+				AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, wd, 0, 2.6),
+				Rotation = rot, BackgroundColor3 = Theme.Muted, BorderSizePixel = 0, ZIndex = 7,
+			}, b)
+			round(f)
+			bars[#bars + 1] = f
+		end
+		if kind == "min" then bar(0, 12) else bar(45, 14); bar(-45, 14) end
 		local hov = false
 		local function rp(i, dur)
 			local col = danger and Theme.Danger or Theme.Glow
-			paint(b, { BackgroundColor3 = hov and Theme.CardHover or Theme.Card, TextColor3 = hov and col or Theme.Muted }, i, dur)
+			paint(b, { BackgroundColor3 = hov and Theme.CardHover or Theme.Card }, i, dur)
 			paint(st, { Color = hov and col or Theme.Border }, i, dur)
+			for _, f in ipairs(bars) do paint(f, { BackgroundColor3 = hov and col or Theme.Muted }, i, dur) end
 		end
 		themed(rp)
 		b.MouseEnter:Connect(function() hov = true; playHoverSound(1.7, 0.35); rp(false, 0.12) end)
 		b.MouseLeave:Connect(function() hov = false; rp(false, 0.15) end)
 		return b
 	end
-	local MinBtn = headerBtn("–", -78, false)
-	local CloseBtn = headerBtn("✕", -42, true)
+	local MinBtn = headerBtn("min", -78, false)
+	local CloseBtn = headerBtn("close", -42, true)
 
 	-- dragging (header drags the whole Root)
 	do
@@ -665,14 +1062,15 @@ function Hallow:CreateWindow(cfg)
 		local footer = new("Frame", {
 			Position = UDim2.new(0, 0, 1, -52), Size = UDim2.new(1, -2, 0, 52), BackgroundTransparency = 1, ZIndex = 3,
 		}, Sidebar)
+		mkIcon("candle", footer, { Size = 20, Position = UDim2.new(0, 12, 0, 6), ZIndex = 3 })
 		tl({
-			Text = "🕯  " .. tostring(localPlayer.DisplayName), Font = Semi, TextSize = 12, TextXAlignment = Left,
+			Text = tostring(localPlayer.DisplayName), Font = Semi, TextSize = 12, TextXAlignment = Left,
 			TextTruncate = Enum.TextTruncate.AtEnd,
-			Position = UDim2.new(0, 14, 0, 8), Size = UDim2.new(1, -22, 0, 18), ZIndex = 3,
+			Position = UDim2.new(0, 38, 0, 8), Size = UDim2.new(1, -46, 0, 18), ZIndex = 3,
 		}, footer, "Text")
 		tl({
 			Text = toggleKey and (toggleKey.Name .. " to hide") or "", TextSize = 10, TextXAlignment = Left,
-			Position = UDim2.new(0, 14, 0, 27), Size = UDim2.new(1, -22, 0, 14), ZIndex = 3,
+			Position = UDim2.new(0, 14, 0, 29), Size = UDim2.new(1, -22, 0, 14), ZIndex = 3,
 		}, footer, "Muted")
 	end
 
@@ -683,48 +1081,61 @@ function Hallow:CreateWindow(cfg)
 	local PAGE_W = W - SB_W - 16
 
 	-- =====================================================================
-	--   HANGING MASCOT (spider / bat / skull / ghost...)
+	--   HANGING MASCOT (spider / bat / skull / ghost / orb ...)
 	-- =====================================================================
-	local SPIDER_LEN = 36
+	local SPIDER_LEN = 38
 	local SpiderRoot = new("Frame", {
 		Name = "Mascot", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0, W - 150, 0, 3),
-		Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1, ZIndex = 4,
+		Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1, ZIndex = 30,
 	}, Root)
 	local Thread = new("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.new(0, 2, 0, 0), BackgroundColor3 = Theme.Muted,
 		BackgroundTransparency = 0.2, BorderSizePixel = 0, ZIndex = 4,
 	}, SpiderRoot)
 	bindTheme(Thread, { BackgroundColor3 = "Muted" })
-	local Bug = label({
-		Text = Theme.Mascot, TextSize = 24, TextTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.1),
-		Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(0, 34, 0, 34), Rotation = Theme.MascotRot or 0, ZIndex = 5,
-	}, SpiderRoot)
+	local Bug = mkIcon(Theme.Mascot, SpiderRoot, {
+		Size = 38, AnchorPoint = Vector2.new(0.5, 0.1), Position = UDim2.new(0, 0, 0, 0),
+		Rotation = Theme.MascotRot or 0, ZIndex = 5,
+	})
+	Bug.GroupTransparency = 1
 
 	local function setSpider(len, dur, style, dir)
-		if len > 0 then Bug.TextTransparency = 0 end
+		if len > 0 then Bug.GroupTransparency = 0 end
 		tw(Thread, { Size = UDim2.new(0, 2, 0, len) }, dur, style, dir)
 		local t = tw(Bug, { Position = UDim2.new(0, 0, 0, len) }, dur, style, dir)
 		if len <= 0 then
-			t.Completed:Connect(function() Bug.TextTransparency = 1 end)
+			t.Completed:Connect(function() Bug.GroupTransparency = 1 end)
 		end
 	end
 
 	-- =====================================================================
-	--   FLOATING ORB (reopen button)
+	--   FLOATING ORB (reopen button) - a glossy sphere on a shadow
 	-- =====================================================================
 	local orbHome = UDim2.new(0.5, 0, 0, 14)
 	local Orb = new("Frame", {
 		Name = "Orb", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, -110),
 		Size = UDim2.new(0, 64, 0, 64), BackgroundTransparency = 1, Active = true, Visible = false, ZIndex = 20,
 	}, ScreenGui)
+	local OrbShadow = new("Frame", {
+		AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 1, 14), Size = UDim2.new(0, 38, 0, 9),
+		BackgroundColor3 = BLACK, BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 1,
+	}, Orb)
+	round(OrbShadow)
 	local OrbHalo = new("Frame", {
 		AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
 	}, Orb)
 	round(OrbHalo)
 	local OrbHaloS = outline(OrbHalo, Theme.Accent, 2, 0.5)
+	local OrbBase = new("Frame", {
+		AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 5), Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Theme.Dark, BorderSizePixel = 0, ZIndex = 1,
+	}, Orb)
+	round(OrbBase)
+	bevel(OrbBase, 120)
+	bindTheme(OrbBase, { BackgroundColor3 = "Dark" })
 	local Bob = new("Frame", {
 		AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = Theme.Bg, BorderSizePixel = 0,
+		BackgroundColor3 = Theme.Bg, BorderSizePixel = 0, ZIndex = 2,
 	}, Orb)
 	round(Bob)
 	bevel(Bob, 175)
@@ -733,10 +1144,15 @@ function Hallow:CreateWindow(cfg)
 	local OrbStroke = outline(Bob, Theme.Glow, 3)
 	sweep(OrbStroke, 95)
 	bindTheme(OrbStroke, { Color = "Glow" })
-	local OrbIcon = label({ Text = Theme.Icon, TextSize = 34, Size = UDim2.new(1, 0, 1, 0) }, Bob)
+	themedIcon(Bob, nil, { Size = 40, AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0), ZIndex = 2 })
+	local OrbGloss = new("Frame", {
+		AnchorPoint = CENTER, Position = UDim2.new(0.30, 0, 0.22, 0), Size = UDim2.new(0, 24, 0, 11), Rotation = -35,
+		BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.78, BorderSizePixel = 0, ZIndex = 3,
+	}, Bob)
+	round(OrbGloss)
 	local OrbTip = tl({
 		Text = "OPEN", Font = Bold, TextSize = 11, TextTransparency = 1, AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 1, 8), Size = UDim2.new(0, 120, 0, 16),
+		Position = UDim2.new(0.5, 0, 1, 24), Size = UDim2.new(0, 120, 0, 16),
 	}, Orb, "Glow")
 
 	local function showOrb()
@@ -846,11 +1262,10 @@ function Hallow:CreateWindow(cfg)
 
 	local floaters = {}
 	local function spawnFloater()
-		local list = Theme.Floaters or { "🎃" }
-		local l = label({
-			Text = list[math.random(#list)], TextSize = math.random(18, 30), AnchorPoint = CENTER,
-			Size = UDim2.new(0, 40, 0, 40), TextTransparency = 1, ZIndex = 1,
-		}, FXLayer)
+		local list = Theme.Floaters or { "pumpkin" }
+		local sz = math.random(20, 32)
+		local l = mkIcon(list[math.random(#list)], FXLayer, { Size = sz, AnchorPoint = CENTER, ZIndex = 1 })
+		l.GroupTransparency = 1
 		floaters[#floaters + 1] = {
 			l = l, x = math.random(40, W - 40), age = 0, life = 9 + math.random() * 6, ph = math.random() * 6.28,
 		}
@@ -901,24 +1316,45 @@ function Hallow:CreateWindow(cfg)
 		end
 	end
 
-	-- ---------- element chrome ----------
+	-- ---------- element chrome (raised "keys": face + slab) ----------
+	local DEPTH, REST, LIFT, PRESS = 5, 2, 0, 4
+
 	local function makeHolder(tab, h)
 		local Holder = new("Frame", {
 			Size = UDim2.new(1, -10, 0, h), BackgroundTransparency = 1, LayoutOrder = #tab.Holders + 1,
 		}, tab.Page)
-		local Inner = new("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1 }, Holder)
-		tab.Holders[#tab.Holders + 1] = { Holder = Holder, Card = Inner }
-		return Holder, Inner
+		local Mover = new("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1 }, Holder)
+		tab.Holders[#tab.Holders + 1] = { Holder = Holder, Card = Mover }
+		return Holder, Mover
 	end
 
 	local function makeCard(tab, h)
-		local Holder, Card = makeHolder(tab, h)
-		Card.BackgroundTransparency = 0
-		Card.BackgroundColor3 = Theme.Card
-		Card.BorderSizePixel = 0
+		local Holder, Mover = makeHolder(tab, h + DEPTH)
+
+		local Base = new("Frame", {
+			Position = UDim2.new(0, 0, 0, DEPTH), Size = UDim2.new(1, 0, 1, -DEPTH),
+			BackgroundColor3 = Theme.Border, BorderSizePixel = 0, ZIndex = 1,
+		}, Mover)
+		round(Base, UDim.new(0, 10))
+
+		local Card = new("Frame", {
+			Position = UDim2.new(0, 0, 0, REST), Size = UDim2.new(1, 0, 1, -DEPTH),
+			BackgroundColor3 = Theme.Card, BorderSizePixel = 0, ZIndex = 2,
+		}, Mover)
 		round(Card, UDim.new(0, 10))
 		bevel(Card, 190)
 		local stroke = outline(Card, Theme.Border, 1.2)
+		rimLight(stroke)
+		-- thin specular line along the top edge
+		local gloss = new("Frame", {
+			Position = UDim2.new(0, 10, 0, 1), Size = UDim2.new(1, -20, 0, 1),
+			BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 1,
+		}, Card)
+		new("UIGradient", {
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1),
+			}),
+		}, gloss)
 		local Pip = new("Frame", {
 			Size = UDim2.new(0, 3, 0, 18), Position = UDim2.new(0, 7, 0.5, -9),
 			BackgroundColor3 = Theme.Dark, BorderSizePixel = 0,
@@ -927,7 +1363,13 @@ function Hallow:CreateWindow(cfg)
 
 		local hover = false
 		local function repaint(i, dur)
-			paint(Card, { BackgroundColor3 = hover and Theme.CardHover or Theme.Card }, i, dur)
+			paint(Card, {
+				BackgroundColor3 = hover and Theme.CardHover or Theme.Card,
+				Position = UDim2.new(0, 0, 0, hover and LIFT or REST),
+			}, i, dur)
+			paint(Base, {
+				BackgroundColor3 = hover and mix(Theme.Dark, BLACK, 0.2) or mix(Theme.Border, BLACK, 0.4),
+			}, i, dur)
 			paint(stroke, { Color = hover and Theme.Accent or Theme.Border }, i, dur)
 			paint(Pip, {
 				BackgroundColor3 = hover and Theme.Glow or Theme.Dark,
@@ -948,8 +1390,12 @@ function Hallow:CreateWindow(cfg)
 				if count == 0 then hover = false; repaint(false, 0.2) end
 			end)
 		end
-		bind(Card)
-		return Card, bind, repaint, Holder
+		bind(Mover)
+
+		local function press(down)
+			tw(Card, { Position = UDim2.new(0, 0, 0, down and PRESS or (hover and LIFT or REST)) }, down and 0.06 or 0.2, down and Easing.Quad or Easing.Back)
+		end
+		return Card, bind, repaint, Holder, press
 	end
 
 	local function ripple(card)
@@ -968,7 +1414,6 @@ function Hallow:CreateWindow(cfg)
 
 	function Win:CreateTab(tabName, icon)
 		tabName = tostring(tabName or "Tab")
-		icon = icon or Theme.Icon
 		local index = #self.Tabs + 1
 		local y = (index - 1) * (TAB_H + TAB_GAP) + 2
 
@@ -976,10 +1421,8 @@ function Hallow:CreateWindow(cfg)
 			Name = tabName .. "_Tab", Position = UDim2.new(0, 6, 0, y), Size = UDim2.new(1, -12, 0, TAB_H),
 			BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 3,
 		}, TabScroll)
-		local IconL = label({
-			Text = icon, TextSize = 18, TextColor3 = Theme.Muted,
-			Position = UDim2.new(0, 12, 0, 0), Size = UDim2.new(0, 26, 1, 0), ZIndex = 3,
-		}, Btn)
+		local IconL = themedIcon(Btn, icon, { Size = 24, Position = UDim2.new(0, 12, 0.5, -12), ZIndex = 3 })
+		IconL.GroupTransparency = 0.5
 		local NameL = label({
 			Text = string.upper(tabName), Font = Bold, TextSize = 12, TextColor3 = Theme.Muted, TextXAlignment = Left,
 			Position = UDim2.new(0, 46, 0, 0), Size = UDim2.new(1, -50, 1, 0), ZIndex = 3,
@@ -1001,9 +1444,11 @@ function Hallow:CreateWindow(cfg)
 
 		local function refresh(i, dur)
 			local active = (Current == tab)
-			local c = active and Theme.Glow or (tab.Hover and Theme.Text or Theme.Muted)
-			paint(NameL, { TextColor3 = c }, i, dur)
-			paint(IconL, { TextColor3 = c, Position = UDim2.new(0, (active or tab.Hover) and 16 or 12, 0, 0) }, i, dur)
+			paint(NameL, { TextColor3 = active and Theme.Glow or (tab.Hover and Theme.Text or Theme.Muted) }, i, dur)
+			paint(IconL, {
+				GroupTransparency = active and 0 or (tab.Hover and 0.1 or 0.5),
+				Position = UDim2.new(0, (active or tab.Hover) and 16 or 12, 0.5, -12),
+			}, i, dur)
 		end
 		tab.Refresh = refresh
 		themed(refresh)
@@ -1029,9 +1474,10 @@ function Hallow:CreateWindow(cfg)
 
 		function E:CreateSection(secName)
 			local _, Inner = makeHolder(tab, 32)
+			themedIcon(Inner, "star", { Size = 14, Position = UDim2.new(0, 6, 0, 8), ZIndex = 2 })
 			tl({
-				Text = "✦  " .. string.upper(tostring(secName)), Font = Bold, TextSize = 12, TextXAlignment = Left,
-				Position = UDim2.new(0, 6, 0, 6), Size = UDim2.new(1, -12, 0, 18),
+				Text = string.upper(tostring(secName)), Font = Bold, TextSize = 12, TextXAlignment = Left,
+				Position = UDim2.new(0, 26, 0, 6), Size = UDim2.new(1, -32, 0, 18),
 			}, Inner, "Glow")
 			local line = new("Frame", {
 				Position = UDim2.new(0, 6, 1, -3), Size = UDim2.new(1, -12, 0, 1), BackgroundColor3 = Theme.Dark, BorderSizePixel = 0,
@@ -1074,7 +1520,7 @@ function Hallow:CreateWindow(cfg)
 			local desc = o.Description or o.Desc or ""
 			local cb = o.Callback or function() end
 			local hasDesc = desc ~= ""
-			local Card, bind, repaint = makeCard(tab, hasDesc and 62 or 48)
+			local Card, bind, repaint, _, press = makeCard(tab, hasDesc and 62 or 48)
 			Card.ClipsDescendants = true
 
 			local Click = new("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 3 }, Card)
@@ -1090,14 +1536,14 @@ function Hallow:CreateWindow(cfg)
 					Position = UDim2.new(0, 20, 0, 31), Size = UDim2.new(1, -70, 0, 18),
 				}, Card, "Muted")
 			end
-			local ic = label({ Text = o.Icon or Theme.Icon, TextSize = 20, Position = UDim2.new(1, -42, 0.5, -12), Size = UDim2.new(0, 24, 0, 24) }, Card)
-			if not o.Icon then themed(function() ic.Text = Theme.Icon end) end
+			themedIcon(Card, o.Icon, { Size = 26, Position = UDim2.new(1, -44, 0.5, -13) })
 
+			Click.MouseButton1Down:Connect(function() press(true) end)
+			Click.MouseButton1Up:Connect(function() press(false) end)
+			Click.MouseLeave:Connect(function() press(false) end)
 			Click.MouseButton1Click:Connect(function()
 				playSound(Hallow.Sounds.Click, 1.0, 0.9)
 				ripple(Card)
-				local f = tw(Card, { BackgroundColor3 = Theme.Dark }, 0.08)
-				f.Completed:Connect(function() repaint(false, 0.25) end)
 				task.spawn(cb)
 			end)
 		end
@@ -1130,22 +1576,33 @@ function Hallow:CreateWindow(cfg)
 			round(Switch)
 			local SwStroke = outline(Switch, Theme.Border, 1.3)
 			bind(Switch)
-			local Thumb = new("Frame", {
-				Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0, 3, 0.5, -9),
-				BackgroundColor3 = C(255, 246, 232), BorderSizePixel = 0,
+			-- sunken groove look
+			new("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(150, 150, 150), Color3.new(1, 1, 1)) }, Switch)
+
+			local ThumbH = new("Frame", {
+				Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0, 3, 0.5, -9), BackgroundTransparency = 1,
 			}, Switch)
+			local ThumbSh = new("Frame", {
+				Position = UDim2.new(0, 0, 0, 2), Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = BLACK,
+				BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 1,
+			}, ThumbH)
+			round(ThumbSh)
+			local Thumb = new("Frame", {
+				Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C(255, 246, 232), BorderSizePixel = 0, ZIndex = 2,
+			}, ThumbH)
 			round(Thumb)
+			bevel(Thumb, 190)
 
 			local function paintSwitch(i, dur)
 				paint(Switch, { BackgroundColor3 = state and Theme.Accent or Theme.Panel }, i, dur)
 				paint(SwStroke, { Color = state and Theme.Glow or Theme.Border }, i, dur)
 			end
 			themed(paintSwitch)
-			Thumb.Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+			ThumbH.Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
 
 			local function apply()
 				paintSwitch(false, 0.18)
-				tw(Thumb, { Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9) }, 0.25, Easing.Back)
+				tw(ThumbH, { Position = state and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9) }, 0.25, Easing.Back)
 			end
 			Switch.MouseButton1Click:Connect(function()
 				state = not state
@@ -1204,6 +1661,7 @@ function Hallow:CreateWindow(cfg)
 			local tst = outline(Track, Theme.Border, 1, 0.3)
 			bindTheme(Track, { BackgroundColor3 = "Panel" })
 			bindTheme(tst, { Color = "Border" })
+			new("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(140, 140, 140), Color3.new(1, 1, 1)) }, Track)
 			bind(Track)
 
 			local Fill = new("Frame", { Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0 }, Track)
@@ -1211,11 +1669,20 @@ function Hallow:CreateWindow(cfg)
 			local grad = new("UIGradient", nil, Fill)
 			themed(function() grad.Color = ColorSequence.new(Theme.Dark, Theme.Glow) end)
 
-			local Knob = new("Frame", {
+			local KnobH = new("Frame", {
 				AnchorPoint = CENTER, Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.new(0, 16, 0, 16),
-				BackgroundColor3 = C(255, 248, 235), BorderSizePixel = 0, ZIndex = 3,
+				BackgroundTransparency = 1, ZIndex = 3,
 			}, Fill)
+			local KnobSh = new("Frame", {
+				Position = UDim2.new(0, 0, 0, 3), Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = BLACK,
+				BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 3,
+			}, KnobH)
+			round(KnobSh)
+			local Knob = new("Frame", {
+				Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C(255, 248, 235), BorderSizePixel = 0, ZIndex = 4,
+			}, KnobH)
 			round(Knob)
+			bevel(Knob, 185)
 			local kst = outline(Knob, Theme.Accent, 2)
 			bindTheme(kst, { Color = "Accent" })
 
@@ -1237,14 +1704,14 @@ function Hallow:CreateWindow(cfg)
 				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 					sliding = true
 					playSound(Hallow.Sounds.Click, 1.4, 0.6)
-					tw(Knob, { Size = UDim2.new(0, 22, 0, 22) }, 0.12, Easing.Back)
+					tw(KnobH, { Size = UDim2.new(0, 22, 0, 22) }, 0.12, Easing.Back)
 					fromInput(input)
 				end
 			end)
 			track(UserInputService.InputEnded:Connect(function(input)
 				if sliding and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
 					sliding = false
-					tw(Knob, { Size = UDim2.new(0, 16, 0, 16) }, 0.15)
+					tw(KnobH, { Size = UDim2.new(0, 16, 0, 16) }, 0.15)
 				end
 			end))
 			track(UserInputService.InputChanged:Connect(function(input)
@@ -1286,10 +1753,20 @@ function Hallow:CreateWindow(cfg)
 				Text = tostring(selected), TextSize = 13, TextXAlignment = Right, AnchorPoint = Vector2.new(1, 0),
 				Position = UDim2.new(1, -40, 0, 0), Size = UDim2.new(0.4, 0, 0, HEAD_H),
 			}, Card, "Glow")
-			local Arrow = tl({
-				Text = "▼", Font = Bold, TextSize = 11, AnchorPoint = CENTER,
-				Position = UDim2.new(1, -22, 0, HEAD_H / 2), Size = UDim2.new(0, 16, 0, 18),
-			}, Card, "Muted")
+
+			-- chevron drawn from two bars (rotates when the list opens)
+			local Arrow = new("Frame", {
+				AnchorPoint = CENTER, Position = UDim2.new(1, -22, 0, HEAD_H / 2), Size = UDim2.new(0, 16, 0, 16),
+				BackgroundTransparency = 1,
+			}, Card)
+			for _, s in ipairs({ -1, 1 }) do
+				local bar = new("Frame", {
+					AnchorPoint = CENTER, Position = UDim2.new(0.5, s * 3.4, 0.5, 1), Size = UDim2.new(0, 9, 0, 2.6),
+					Rotation = -s * 40, BackgroundColor3 = Theme.Muted, BorderSizePixel = 0,
+				}, Arrow)
+				round(bar)
+				bindTheme(bar, { BackgroundColor3 = "Muted" })
+			end
 
 			local ListHolder = new("Frame", {
 				Position = UDim2.new(0, 12, 0, HEAD_H), Size = UDim2.new(1, -24, 0, 0), BackgroundTransparency = 1,
@@ -1297,7 +1774,7 @@ function Hallow:CreateWindow(cfg)
 			new("UIListLayout", { Padding = UDim.new(0, 4) }, ListHolder)
 
 			local recs = {}
-			local function fullH() return HEAD_H + #items * (ITEM_H + 4) + 8 end
+			local function fullH() return HEAD_H + #items * (ITEM_H + 4) + 8 + DEPTH end
 
 			local function choose(item, fire)
 				selected = item
@@ -1309,7 +1786,7 @@ function Hallow:CreateWindow(cfg)
 			local function collapse()
 				expanded = false
 				tw(Arrow, { Rotation = 0 }, 0.2)
-				tw(Holder, { Size = UDim2.new(1, -10, 0, HEAD_H) }, 0.3, Easing.Quint)
+				tw(Holder, { Size = UDim2.new(1, -10, 0, HEAD_H + DEPTH) }, 0.3, Easing.Quint)
 			end
 
 			local function build()
@@ -1323,6 +1800,7 @@ function Hallow:CreateWindow(cfg)
 						TextXAlignment = Left, AutoButtonColor = false,
 					}, ListHolder)
 					round(b, UDim.new(0, 8))
+					bevel(b, 205)
 					local rec = { btn = b, hover = false }
 					rec.repaint = function(i, dur)
 						paint(b, {
@@ -1347,7 +1825,7 @@ function Hallow:CreateWindow(cfg)
 				expanded = not expanded
 				playSound(Hallow.Sounds.Click, 1.0, 0.8)
 				tw(Arrow, { Rotation = expanded and 180 or 0 }, 0.25)
-				tw(Holder, { Size = UDim2.new(1, -10, 0, expanded and fullH() or HEAD_H) }, 0.3, Easing.Quint)
+				tw(Holder, { Size = UDim2.new(1, -10, 0, expanded and fullH() or (HEAD_H + DEPTH)) }, 0.3, Easing.Quint)
 			end)
 
 			local api = {}
@@ -1380,6 +1858,7 @@ function Hallow:CreateWindow(cfg)
 				Text = key == Enum.KeyCode.None and "None" or key.Name, AutoButtonColor = false,
 			}, Card)
 			round(KeyBtn, UDim.new(0, 8))
+			bevel(KeyBtn, 200)
 			local ks = outline(KeyBtn, Theme.Border, 1.3)
 			bindTheme(KeyBtn, { BackgroundColor3 = "Panel", TextColor3 = "Glow" })
 			bindTheme(ks, { Color = "Border" })
@@ -1433,6 +1912,7 @@ function Hallow:CreateWindow(cfg)
 				Text = o.Default or "", ClearTextOnFocus = o.ClearOnFocus or false, ClipsDescendants = true,
 			}, Card)
 			round(Box, UDim.new(0, 8))
+			new("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(150, 150, 150), Color3.new(1, 1, 1)) }, Box)
 			local bs = outline(Box, Theme.Border, 1.3)
 			bindTheme(Box, { BackgroundColor3 = "Panel", TextColor3 = "Text", PlaceholderColor3 = "Muted" })
 			bindTheme(bs, { Color = "Border" })
@@ -1455,7 +1935,7 @@ function Hallow:CreateWindow(cfg)
 	--   THEME TAB (cards + ambient effect toggles + scale + toggle key)
 	-- =====================================================================
 	function Win:CreateThemeTab(tabName, icon)
-		local tab = self:CreateTab(tabName or "Themes", icon or "🎨")
+		local tab = self:CreateTab(tabName or "Themes", icon or "palette")
 
 		tab:CreateSection("Choose Your Haunting")
 		local rows = math.ceil(#Hallow.ThemeOrder / 2)
@@ -1467,15 +1947,23 @@ function Hallow:CreateWindow(cfg)
 		for n, key in ipairs(Hallow.ThemeOrder) do
 			local def = Hallow.Themes[key]
 			local Cell = new("Frame", { BackgroundTransparency = 1, LayoutOrder = n }, Grid)
+			local Slab = new("Frame", {
+				Position = UDim2.new(0, 0, 0, 5), Size = UDim2.new(1, 0, 1, -5),
+				BackgroundColor3 = mix(def.Accent, BLACK, 0.6), BorderSizePixel = 0, ZIndex = 1,
+			}, Cell)
+			round(Slab, UDim.new(0, 12))
 			local Card = new("TextButton", {
-				AnchorPoint = CENTER, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(1, 0, 1, 0),
-				BackgroundColor3 = def.Panel, BorderSizePixel = 0, Text = "", AutoButtonColor = false,
+				Position = UDim2.new(0, 0, 0, 2), Size = UDim2.new(1, 0, 1, -5),
+				BackgroundColor3 = def.Panel, BorderSizePixel = 0, Text = "", AutoButtonColor = false, ZIndex = 2,
 			}, Cell)
 			round(Card, UDim.new(0, 12))
 			bevel(Card, 205)
 			local st = outline(Card, def.Accent, 1.5, 0.55)
 
-			label({ Text = def.Icon, TextSize = 30, Position = UDim2.new(0, 10, 0, 6), Size = UDim2.new(0, 44, 0, 44) }, Card)
+			mkIcon(def.Icon, Card, {
+				Size = 42, Position = UDim2.new(0, 9, 0, 8), ZIndex = 2,
+				Pal = { a = def.Accent, g = def.Glow, d = def.Dark, bg = def.Bg, t = def.Text },
+			})
 			label({
 				Text = def.Name or key, Font = Bold, TextSize = 14, TextColor3 = def.Text, TextXAlignment = Left,
 				Position = UDim2.new(0, 58, 0, 10), Size = UDim2.new(1, -66, 0, 18),
@@ -1486,14 +1974,15 @@ function Hallow:CreateWindow(cfg)
 			}, Card)
 			for s, col in ipairs({ def.Accent, def.Glow, def.Dark, def.Border }) do
 				local dot = new("Frame", {
-					Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(0, 60 + (s - 1) * 19, 1, -24),
+					Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(0, 60 + (s - 1) * 19, 1, -22),
 					BackgroundColor3 = col, BorderSizePixel = 0,
 				}, Card)
 				round(dot)
+				bevel(dot, 170)
 			end
 			local Badge = label({
-				Text = "✔ ACTIVE", Font = Bold, TextSize = 10, TextColor3 = def.Glow, TextXAlignment = Right,
-				TextTransparency = 1, Position = UDim2.new(1, -10, 1, -24), Size = UDim2.new(0, 80, 0, 14),
+				Text = "ACTIVE", Font = Bold, TextSize = 10, TextColor3 = def.Glow, TextXAlignment = Right,
+				TextTransparency = 1, Position = UDim2.new(1, -10, 1, -22), Size = UDim2.new(0, 80, 0, 14),
 			}, Card)
 
 			themed(function(i)
@@ -1504,25 +1993,28 @@ function Hallow:CreateWindow(cfg)
 
 			Card.MouseEnter:Connect(function()
 				playHoverSound(1.7, 0.3)
-				tw(Card, { Size = UDim2.new(1, 6, 1, 4) }, 0.15, Easing.Back)
+				tw(Card, { Position = UDim2.new(0, 0, 0, -1) }, 0.15, Easing.Back)
 			end)
-			Card.MouseLeave:Connect(function() tw(Card, { Size = UDim2.new(1, 0, 1, 0) }, 0.15) end)
+			Card.MouseLeave:Connect(function() tw(Card, { Position = UDim2.new(0, 0, 0, 2) }, 0.15) end)
+			Card.MouseButton1Down:Connect(function() tw(Card, { Position = UDim2.new(0, 0, 0, 5) }, 0.06) end)
+			Card.MouseButton1Up:Connect(function() tw(Card, { Position = UDim2.new(0, 0, 0, -1) }, 0.2, Easing.Back) end)
 			Card.MouseButton1Click:Connect(function() Win:SetTheme(key) end)
 		end
 
-		tab:CreateButton({ Name = "Random Theme", Description = "let the spirits decide", Icon = "🎲", Callback = function()
+		tab:CreateButton({ Name = "Random Theme", Description = "let the spirits decide", Icon = "dice", Callback = function()
 			local pool = {}
 			for _, k in ipairs(Hallow.ThemeOrder) do if k ~= Win.ThemeName then pool[#pool + 1] = k end end
 			if #pool > 0 then Win:SetTheme(pool[math.random(#pool)]) end
 		end })
-		tab:CreateButton({ Name = "Lightning Strike", Description = "because why not", Icon = "⚡", Callback = function()
+		tab:CreateButton({ Name = "Lightning Strike", Description = "because why not", Icon = "bolt", Callback = function()
 			Win:Lightning()
 		end })
 
 		tab:CreateSection("Ambience")
 		tab:CreateToggle({ Name = "Rising Embers", Default = FX.Embers, Callback = function(v) FX.Embers = v end })
-		tab:CreateToggle({ Name = "Floating Spirits", Description = "themed emoji drifting through the window", Default = FX.Floaters, Callback = function(v) FX.Floaters = v end })
+		tab:CreateToggle({ Name = "Floating Spirits", Description = "drawn spirits drifting through the window", Default = FX.Floaters, Callback = function(v) FX.Floaters = v end })
 		tab:CreateToggle({ Name = "Creeping Fog", Default = FX.Fog, Callback = function(v) FX.Fog = v end })
+		tab:CreateToggle({ Name = "Depth Parallax", Description = "the slab turns toward your cursor", Default = FX.Parallax, Callback = function(v) FX.Parallax = v end })
 		tab:CreateToggle({ Name = "UI Sounds", Default = Hallow.SoundsEnabled, Callback = function(v) Hallow.SoundsEnabled = v end })
 
 		tab:CreateSection("Window")
@@ -1546,15 +2038,13 @@ function Hallow:CreateWindow(cfg)
 		local live = self.Started and not self.Minimized and not self.InIntro and not self.Destroyed
 		for _, fn in ipairs(appliers) do pcall(fn, not live) end
 
-		HeaderIcon.Text = Theme.Icon
-		OrbIcon.Text = Theme.Icon
 		Bug.Rotation = Theme.MascotRot or 0
 		if live then
 			-- the mascot lowers itself away, swaps, and drops back in
 			setSpider(0, 0.3, Easing.Back, Dir.In)
 			task.delay(0.35, function()
 				if self.Destroyed then return end
-				Bug.Text = Theme.Mascot
+				drawInto(Bug, Theme.Mascot, palette())
 				setSpider(SPIDER_LEN, 0.9, Easing.Bounce, Dir.Out)
 			end)
 			lightning(0.55)
@@ -1562,7 +2052,7 @@ function Hallow:CreateWindow(cfg)
 			shockwave(RootFX, Theme.Glow, 120, W * 1.3, 0.8, 4)
 			burst(RootFX, Theme.Swarm, 14, { Life = 1.6, MinSpeed = 220, MaxSpeed = 560 })
 		else
-			Bug.Text = Theme.Mascot
+			drawInto(Bug, Theme.Mascot, palette())
 		end
 
 		if cfg.RememberTheme ~= false and typeof(writefile) == "function" then
@@ -1673,6 +2163,27 @@ function Hallow:CreateWindow(cfg)
 	-- =====================================================================
 	--   THE SUMMONING  (intro)
 	-- =====================================================================
+	-- a hand-built rune (a few bars), 6 variants
+	local function rune(parent, v, col, size)
+		local g = new("CanvasGroup", {
+			AnchorPoint = CENTER, Size = UDim2.new(0, size, 0, size), BackgroundTransparency = 1, GroupTransparency = 1,
+		}, parent)
+		if v == 1 then
+			P(g, "rect", 0.4, 0.5, 0.12, 0.9, col); P(g, "rect", 0.62, 0.32, 0.12, 0.55, col, -40)
+		elseif v == 2 then
+			P(g, "rect", 0.4, 0.5, 0.12, 0.9, col); P(g, "rect", 0.64, 0.28, 0.12, 0.45, col, -55); P(g, "rect", 0.64, 0.60, 0.12, 0.45, col, -55)
+		elseif v == 3 then
+			P(g, "round", 0.5, 0.5, 0.5, 0.5, col, 45); P(g, "rect", 0.5, 0.5, 0.1, 0.95, col)
+		elseif v == 4 then
+			P(g, "rect", 0.5, 0.5, 0.12, 0.95, col, 45); P(g, "rect", 0.5, 0.5, 0.12, 0.95, col, -45)
+		elseif v == 5 then
+			P(g, "rect", 0.35, 0.5, 0.12, 0.9, col); P(g, "rect", 0.62, 0.33, 0.12, 0.5, col, -40); P(g, "rect", 0.62, 0.67, 0.12, 0.5, col, 40)
+		else
+			P(g, "ellipse", 0.5, 0.3, 0.34, 0.34, col); P(g, "rect", 0.5, 0.72, 0.12, 0.5, col)
+		end
+		return g
+	end
+
 	local function runIntro()
 		Win.InIntro = true
 		local ritual = {}
@@ -1697,19 +2208,16 @@ function Hallow:CreateWindow(cfg)
 			AnchorPoint = CENTER, Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(0, 0, 0, 0),
 			BackgroundTransparency = 1, ZIndex = 2,
 		}, Stage))
-		local glyphs = { "✦", "☽", "†", "✧", "☾", "☠", "✠", "✶" }
 		local runeLabels = {}
 		local RUNES = 32
 		local fr = (RING_R + 22) / S
 		for i = 1, RUNES do
 			local a = (i / RUNES) * 2 * math.pi
 			local big = (i % 4 == 0)
-			runeLabels[i] = label({
-				Text = glyphs[(i - 1) % #glyphs + 1], TextSize = big and 20 or 14,
-				TextColor3 = big and Theme.Glow or Theme.Accent, TextTransparency = 1, AnchorPoint = CENTER,
-				Position = UDim2.new(0.5 + math.cos(a) * fr, 0, 0.5 + math.sin(a) * fr, 0),
-				Size = UDim2.new(0, 24, 0, 24), Rotation = math.deg(a) + 90,
-			}, Runes)
+			local rn = rune(Runes, (i - 1) % 6 + 1, big and Theme.Glow or Theme.Accent, big and 20 or 14)
+			rn.Position = UDim2.new(0.5 + math.cos(a) * fr, 0, 0.5 + math.sin(a) * fr, 0)
+			rn.Rotation = math.deg(a) + 90
+			runeLabels[i] = rn
 		end
 
 		-- eight candles
@@ -1741,16 +2249,15 @@ function Hallow:CreateWindow(cfg)
 			candles[i] = { flame = flame, halo = halo, lit = false, cx = cx, cy = cy }
 		end
 
-		-- centre sigil
+		-- centre sigil (the theme's icon)
 		local sigilGlow = keep(new("Frame", {
 			AnchorPoint = CENTER, Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(0, 0, 0, 0),
 			BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.82, BorderSizePixel = 0, ZIndex = 3,
 		}, Stage))
 		round(sigilGlow)
-		local sigil = keep(label({
-			Text = Theme.Icon, TextScaled = true, AnchorPoint = CENTER, Position = UDim2.new(0, 0, 0, 0),
-			Size = UDim2.new(0, 0, 0, 0), ZIndex = 4,
-		}, Stage))
+		local sigil = keep(mkIcon(Theme.Icon, Stage, {
+			Size = UDim2.new(0, 0, 0, 0), AnchorPoint = CENTER, Position = UDim2.new(0, 0, 0, 0), ZIndex = 4,
+		}))
 
 		local status = keep(label({
 			Text = "", TextSize = 13, TextColor3 = Theme.Muted, TextTransparency = 1, AnchorPoint = CENTER,
@@ -1788,7 +2295,7 @@ function Hallow:CreateWindow(cfg)
 		tw(ringInnerS, { Transparency = 0.45 }, 1.1)
 		tw(Runes, { Size = UDim2.new(0, S, 0, S) }, 1.0, Easing.Quint)
 		for i, l in ipairs(runeLabels) do
-			task.delay(0.15 + i * 0.02, function() tw(l, { TextTransparency = 0.05 }, 0.25) end)
+			task.delay(0.15 + i * 0.02, function() tw(l, { GroupTransparency = 0.05 }, 0.25) end)
 		end
 		task.wait(0.8)
 
@@ -1809,15 +2316,15 @@ function Hallow:CreateWindow(cfg)
 		spinTarget = 300
 		playSound(Hallow.Sounds.Open, 0.7, 1)
 		tw(sigilGlow, { Size = UDim2.new(0, 150, 0, 150) }, 0.7, Easing.Quint)
-		tw(sigil, { Size = UDim2.new(0, 92, 0, 92) }, 0.6, Easing.Back)
+		tw(sigil, { Size = UDim2.new(0, 96, 0, 96) }, 0.6, Easing.Back)
 		task.wait(0.85)
 		if Win.Destroyed then conn:Disconnect() return end
 
 		-- 4. STRIKE
 		lightning(1)
 		shake(Stage, 14, 0.5)
-		burst(Stage, Theme.Swarm, 28, { Life = 2.1, MinSpeed = 320, MaxSpeed = 900, Size1 = 56 })
-		shockwave(Stage, Theme.AmberGlow or Theme.Glow, 160, 900, 1.1, 5)
+		burst(Stage, Theme.Swarm, 24, { Life = 2.1, MinSpeed = 320, MaxSpeed = 900, Size1 = 58 })
+		shockwave(Stage, Theme.Glow, 160, 900, 1.1, 5)
 		shockwave(Stage, Theme.Accent, 220, 1100, 1.4, 3)
 		status.TextTransparency = 1
 		for _, c in ipairs(candles) do
@@ -1826,7 +2333,7 @@ function Hallow:CreateWindow(cfg)
 			tw(c.halo, { Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1 }, 0.3)
 		end
 		tw(Runes, { Size = UDim2.new(0, S * 1.7, 0, S * 1.7) }, 0.7, Easing.Quint)
-		for _, l in ipairs(runeLabels) do tw(l, { TextTransparency = 1 }, 0.5) end
+		for _, l in ipairs(runeLabels) do tw(l, { GroupTransparency = 1 }, 0.5) end
 		tw(ringOuter, { Size = UDim2.new(0, RING_R * 3, 0, RING_R * 3) }, 0.7, Easing.Quint)
 		tw(ringOuterS, { Transparency = 1 }, 0.6)
 		tw(ringInner, { Size = UDim2.new(0, RING_R * 2, 0, RING_R * 2) }, 0.7, Easing.Quint)
@@ -1858,10 +2365,11 @@ function Hallow:CreateWindow(cfg)
 	end
 
 	-- =====================================================================
-	--   MAIN LOOP (sweeping borders, glow flicker, fog, spirits, embers...)
+	--   MAIN LOOP (sweeping borders, slab parallax, glow flicker, fog, spirits, embers...)
 	-- =====================================================================
 	local t0 = os.clock()
 	local emberT, floatT = 0.5, 1.5
+	local pm = Vector2.new(0, 0) -- smoothed cursor offset, -1..1
 	track(RunService.RenderStepped:Connect(function(dt)
 		local t = os.clock() - t0
 
@@ -1874,7 +2382,16 @@ function Hallow:CreateWindow(cfg)
 			end
 		end
 
-		-- candle-light glow behind the window
+		-- cursor -> parallax target
+		local target = Vector2.new(0, 0)
+		if FX.Parallax and Root.Visible then
+			local mp = UserInputService:GetMouseLocation()
+			local rc = Root.AbsolutePosition + Root.AbsoluteSize / 2
+			target = Vector2.new(math.clamp((mp.X - rc.X) / 500, -1, 1), math.clamp((mp.Y - rc.Y) / 350, -1, 1))
+		end
+		pm = pm + (target - pm) * math.min(1, dt * 6)
+
+		-- window glow, cast shadow and extruded slab all follow the window's live size
 		glowI += (glowTarget - glowI) * math.min(1, dt * 4)
 		local flick = math.clamp(0.5 + math.noise(t * 2.2, 3.71), 0, 1)
 		local gw, gh = Window.Size.X.Offset, Window.Size.Y.Offset
@@ -1884,13 +2401,32 @@ function Hallow:CreateWindow(cfg)
 			g.BackgroundColor3 = (i == 1) and Theme.Accent or Theme.Dark
 			g.BackgroundTransparency = 1 - (1 - GLOW_BASE[i]) * glowI * (0.8 + 0.2 * flick)
 		end
+		for i, s in ipairs(Shadow) do
+			local pad = i * 8 - 6
+			s.Size = UDim2.new(0, math.max(0, gw + pad * 2 - 20), 0, math.max(0, gh + pad * 2 - 20))
+			s.Position = UDim2.new(0.5, pm.X * 10, 0.5, 26 + pm.Y * 8)
+			s.BackgroundTransparency = 1 - 0.085 * glowI
+		end
+		for k = 1, SLABS do
+			local s = Slab[k]
+			s.Position = UDim2.new(0.5, pm.X * k * 1.25, 0.5, pm.Y * k * 0.95 + k * 1.5)
+			s.Size = UDim2.new(0, math.max(0, gw - k * 0.9), 0, math.max(0, gh - k * 0.9))
+		end
+
+		-- layers inside the window drift against the cursor (background deeper than foreground)
+		FXLayer.Position = UDim2.new(0, -pm.X * 9, 0, -pm.Y * 7)
+		SpiderRoot.Position = UDim2.new(0, W - 150 + pm.X * 5, 0, 3)
 
 		-- hanging mascot swings
 		SpiderRoot.Rotation = math.sin(t * 1.5) * 7
 
-		-- orb: bob + pulsing halo
+		-- orb: bob + pulsing halo + squashing shadow
 		if Orb.Visible then
-			Bob.Position = UDim2.new(0.5, 0, 0.5, math.sin(t * 2.2) * 3)
+			local by = math.sin(t * 2.2) * 3
+			Bob.Position = UDim2.new(0.5, 0, 0.5, by)
+			OrbBase.Position = UDim2.new(0.5, 0, 0.5, by + 5)
+			OrbShadow.Size = UDim2.new(0, 38 - by * 2.5, 0, 9 - by * 0.6)
+			OrbShadow.BackgroundTransparency = 0.6 + by * 0.04
 			local k = (t % 1.8) / 1.8
 			OrbHalo.Size = UDim2.new(1, k * 40, 1, k * 40)
 			OrbHaloS.Transparency = 0.3 + 0.7 * k
@@ -1924,7 +2460,7 @@ function Hallow:CreateWindow(cfg)
 				else
 					f.l.Position = UDim2.new(0, f.x + math.sin(f.age * 0.9 + f.ph) * 26, 0, H + 30 - k * (H + 80))
 					f.l.Rotation = math.sin(f.age * 0.7 + f.ph) * 12
-					f.l.TextTransparency = 0.62 + 0.38 * (math.abs(k * 2 - 1) ^ 3)
+					f.l.GroupTransparency = 0.62 + 0.38 * (math.abs(k * 2 - 1) ^ 3)
 				end
 			end
 		end
